@@ -118,7 +118,9 @@ If previous next: was NOT completed and is being replaced, it moves to tasks.md 
 
 ### 5. Prepare Remaining Content (in memory)
 
-After the log entry lands, prepare the content for all remaining files in memory:
+**Re-read `_core/log.md` first ~150 lines** to ground the now.md synthesis in the actual written log. This captures the entry just prepended in step 4 plus the previous 3-4 entries — enough for a proper 3-5 entry synthesis. Don't rely on memory of what was read in step 1; the log has changed since then.
+
+Then prepare the content for all remaining files in memory:
 
 - **now.md** — full replacement: phase, health, next, updated, squirrel, context paragraph. The context paragraph synthesises the last 3-5 log entries (including the one just written) — what's been happening across sessions, not just this session. A new squirrel reading now.md should understand the full current situation without touching the log.
 - **tasks.md** — new tasks added, completed marked, in-progress updated
