@@ -1,26 +1,27 @@
 ---
-description: Seed or migrate content into a newly created walnut. Handles both light seeding (a few loose files) and full project migration (entire structured ventures). Non-user-invocable — triggered from alive:create Step 5 only.
+name: migrate
+description: Seed or migrate content into a newly created walnut. Handles both light seeding (a few loose files) and full project migration (entire structured ventures). Non-user-invocable — triggered from alive:create Step 7 only.
 internal: true
 ---
 
 # Migrate
 
-Bring existing content into a new walnut. Triggered from `alive:create` Step 5 only. Not user-invocable.
+Bring existing content into a new walnut. Triggered from `alive:create` Step 7 only. Not user-invocable.
 
 Two modes, auto-detected based on what's at the source path:
 
 - **Seed mode** — a flat folder or small set of loose files. Capture-style processing.
 - **Migration mode** — a structured project with brain files, references, working drafts, and live context. Full interpretation pipeline.
 
-You doesn't choose the mode. The squirrel scans the source and picks the right one.
+The human doesn't choose the mode. The squirrel scans the source and picks the right one.
 
 ---
 
 ## Entry Point
 
-**You are reading this because you answered "yes" to the existing content question in `alive:create` Step 5.** The walnut has already been scaffolded (Step 4).
+**You are reading this because the human answered "yes" to the existing content question in `alive:create` Step 7.** The walnut has already been scaffolded (Step 6).
 
-Ask you what they want to bring in:
+Ask the human what they want to bring in:
 
 ```
 → AskUserQuestion: "What do you want to bring across?"
@@ -67,7 +68,7 @@ skip_candidates: [".credentials", ".DS_Store", ".specstory", ".claude"]
 - If `file_count < 20` AND `has_brain == false` AND no nested structure → **seed mode**
 - Otherwise → **migration mode**
 
-If the mode is ambiguous, present both options to you and let them choose.
+If the mode is ambiguous, present both options to the human and let them choose.
 
 ---
 
@@ -190,7 +191,7 @@ Dispatch a scanner subagent with:
 | **brain** | Files containing state, status, tasks, insights, history, roadmaps, changelogs | Interpreted by brain subagents → written to `_core/` system files |
 | **references** | Structured reference material — companions with raw files, meeting transcripts, articles, emails, inspiration | Copied to `_core/_references/`, directory structure preserved |
 | **working** | Active drafts, in-progress documents, plans, session handoffs | Copied to `_core/_working/` |
-| **live** | You's actual work — folders with their own purpose, READMEs, creative output, code, assets | Copied straight to walnut root, untouched |
+| **live** | The human's actual work — folders with their own purpose, READMEs, creative output, code, assets | Copied straight to walnut root, untouched |
 | **skip** | System files, caches, credentials, IDE config, symlinks, `.DS_Store` | Excluded entirely |
 
 **How to classify — the scanner reads enough to decide, not everything:**
@@ -293,7 +294,7 @@ brain_routing:
 
 ### Phase 2: Plan
 
-**Purpose:** Present the migration map to you for approval. Hard gate — nothing gets written without a "go".**
+**Purpose:** Present the migration map to the human for approval. Hard gate — nothing gets written without a "go".**
 
 The main context takes the scanner's report and presents it:
 
@@ -326,13 +327,13 @@ The main context takes the scanner's report and presents it:
 ╰─
 ```
 
-**If you say "change something":**
+**If the human says "change something":**
 - Ask what they want to change
 - Adjust the plan (e.g., "skip the shopify theme", "put roadmap in live context not working", "don't migrate done tasks")
 - Re-present the updated plan
 - Loop until they say "go" or "cancel"
 
-**If "cancel"** — stop. The walnut already exists (scaffolded in create Step 4) but has no migrated content. Offer `open {name}`.
+**If "cancel"** — stop. The walnut already exists (scaffolded in create Step 6) but has no migrated content. Offer `open {name}`.
 
 **If "go"** — proceed to Execute. No more questions.
 
@@ -454,7 +455,7 @@ Dispatch exactly 4 subagents simultaneously — one per brain target file. Each 
 
 > You are migrating tasks from an old system into walnut tasks.md. Read the template first.
 >
-> **Frontmatter:** `alive: {name}`, `updated: {today}`
+> **Frontmatter:** `walnut: {name}`, `updated: {today}`
 >
 > **Sections:** `## Urgent`, `## Active`, `## To Do`, `## Blocked`, `## Done`
 >
@@ -485,7 +486,7 @@ Dispatch exactly 4 subagents simultaneously — one per brain target file. Each 
 
 > You are migrating domain knowledge into walnut insights.md. Read the template first.
 >
-> **Frontmatter:** `alive: {name}`, `updated: {today}`
+> **Frontmatter:** `walnut: {name}`, `updated: {today}`
 >
 > **Sections:** `## Strategy`, `## Process`, `## Product`, `## People`, `## Other`
 >
@@ -508,7 +509,7 @@ Dispatch exactly 4 subagents simultaneously — one per brain target file. Each 
 
 **CRITICAL: Do NOT dispatch a subagent for log.md.**
 
-The log guardian hook blocks the `Write` tool on any file named `log.md`. This is by design — logs are append-only. But during migration of a brand-new walnut, the log.md was already created by `alive:create` Step 4 with a single "Walnut created" entry. The migration needs to replace it with richer history.
+The log guardian hook blocks the `Write` tool on any file named `log.md`. This is by design — logs are append-only. But during migration of a brand-new walnut, the log.md was already created by `alive:create` Step 6 with a single "Walnut created" entry. The migration needs to replace it with richer history.
 
 **Use bash (`cat >`) to write log.md.** The log guardian hook applies to the Write tool, not bash.
 
@@ -567,7 +568,7 @@ LOGEOF
 ```
 
 **Frontmatter fields:**
-- `alive:` — the walnut name
+- `walnut:` — the walnut name
 - `created:` — today's date (the walnut was just created)
 - `last-entry:` — today's date
 - `entry-count:` — number of entries (migration entry + converted entries)
@@ -619,7 +620,7 @@ If a subagent failed, report the failure and offer to retry that specific subage
 
 **The housekeeping nudge is strong, not a suggestion.** The walnut is functional but not guaranteed fully conformant. Migrated content (especially live context folders copied straight across) may have markdown files without YAML frontmatter, references without companions, inconsistent naming, or other convention violations. Housekeeping is the conformance pass. It should run in a new session to get a clean context window.
 
-If you say "open" — invoke `alive:open` flow.
+If the human says "open" — invoke `alive:open` flow.
 If "done" — end.
 
 ---
@@ -653,17 +654,17 @@ These are non-negotiable. If you're implementing this skill and tempted to skip 
 
 2. **Templates before writing.** Every subagent must read the relevant template from `templates/walnut/` or `templates/companion/` BEFORE writing. Do not reconstruct formats from memory. Templates are the source of truth for file structure.
 
-3. **Plan is a hard gate.** Nothing gets written to the walnut until you say "go". The plan step exists because moving 1000+ files is not reversible in practice. Respect it.
+3. **Plan is a hard gate.** Nothing gets written to the walnut until the human says "go". The plan step exists because moving 1000+ files is not reversible in practice. Respect it.
 
 4. **Brain interpreters are prescribed.** Exactly 4 subagents: key, now, tasks, insights. One file per subagent. This is not flexible — it's testable and predictable. Log.md is handled by main context.
 
 5. **Log guardian hook.** The Write tool is blocked on `log.md` by the log guardian hook. Use bash (`cat >`) for writing log.md during migration. This only applies to new walnut creation — normal log updates during sessions use Edit to prepend.
 
-6. **Live context is sacred.** Folders classified as "live" are copied byte-for-byte. No interpretation, no renaming, no restructuring. You's work is untouched.
+6. **Live context is sacred.** Folders classified as "live" are copied byte-for-byte. No interpretation, no renaming, no restructuring. The human's work is untouched.
 
 7. **Sign everything.** All brain file writes include the session_id. Use `@migrated` for task/insight attribution from old systems. Log entries from old systems keep their original session IDs.
 
-8. **Copy, don't move.** All operations copy from source. The source is never modified or deleted. You decides when to remove the old project.
+8. **Copy, don't move.** All operations copy from source. The source is never modified or deleted. The human decides when to remove the old project.
 
 9. **Housekeeping is not optional.** The handoff must strongly recommend running housekeeping in a new session. Migration ensures the brain files are correct. Housekeeping ensures everything else is conformant.
 

@@ -1,12 +1,12 @@
 ---
 name: world
-description: "Use when you want a dashboard view of all active walnuts, feels lost, or is unsure what to work on next. Renders a live world view grouped by ALIVE domain — priorities, attention items, full walnut tree, and recent activity — then routes to open, housekeeping, find, or recall."
+description: "Use when the human wants a dashboard view of all active walnuts, feels lost, or is unsure what to work on next. Renders a live world view grouped by ALIVE domain — priorities, attention items, full walnut tree, and recent activity — then routes to open, housekeeping, find, or recall."
 user-invocable: true
 ---
 
 # World
 
-This is Mission Control. When you opens their world, it should feel like booting an operating system — everything they care about, at a glance, with clear paths to action.
+This is Mission Control. When the human opens their world, it should feel like booting an operating system — everything they care about, at a glance, with clear paths to action.
 
 NOT a database dump. NOT a flat list. A living view of their world, grouped by what matters, showing relationships, surfacing what needs attention.
 
@@ -38,7 +38,7 @@ The dashboard has 4 sections. Each tells you something different.
 
 ### Section 1: Right Now
 
-What needs you TODAY. Not everything — just what's active and demanding.
+What needs the human's attention TODAY. Not everything — just what's active and demanding.
 
 ```
 ╭─ 🐿️ your world
@@ -86,13 +86,13 @@ Things that need your decision or action. Not walnuts — specific issues.
 ```
 
 Sources:
-- **Inputs buffer (HIGH PRIORITY)** — anything in `03_Inputs/` older than 48 hours. These are unrouted context that could impact active walnuts TODAY. The squirrel should stress this to you: "You have unrouted inputs. These might contain decisions, tasks, or context that affects your active work. Route them before diving into a walnut."
+- **Inputs buffer (HIGH PRIORITY)** — anything in `03_Inputs/` older than 48 hours. These are unrouted context that could impact active walnuts TODAY. The squirrel should stress this to the human: "You have unrouted inputs. These might contain decisions, tasks, or context that affects your active work. Route them before diving into a walnut."
 - API context (Gmail unread, Slack mentions, Calendar upcoming)
 - Unsigned squirrel entries with stash items
 - Stale walnuts (quiet/waiting)
 - Stale working files
 
-**Inputs triage:** The world skill should understand that inputs are a buffer — content arrives there and needs routing to its proper walnut. When surfacing inputs, the squirrel should scan the companion frontmatter (if companions exist) or the file names to understand what the content might relate to. Don't digest the full content — just flag it, estimate which walnuts it might affect, and urge you to route it. Use `alive:capture` to process each input properly.
+**Inputs triage:** The world skill should understand that inputs are a buffer — content arrives there and needs routing to its proper walnut. When surfacing inputs, the squirrel should scan the companion frontmatter (if companions exist) or the file names to understand what the content might relate to. Don't digest the full content — just flag it, estimate which walnuts it might affect, and urge the human to route it. Use `alive:capture` to process each input properly.
 
 ### Section 3: Your World (the tree)
 
@@ -175,7 +175,7 @@ What's been happening across the world. A pulse check.
 3. **The tree is scannable.** Indent sub-walnuts. Collapse where sensible. Show people under Life.
 4. **Recent activity gives pulse.** Not details — just "what's been happening."
 5. **Numbers for navigation.** Any walnut with a number can be opened by typing the number.
-6. **Don't show everything.** Waiting walnuts can be collapsed. Quiet experiments get a count. You asks for more if they want it.
+6. **Don't show everything.** Waiting walnuts can be collapsed. Quiet experiments get a count. The human asks for more if they want it.
 
 ---
 

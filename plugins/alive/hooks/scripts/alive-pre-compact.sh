@@ -24,7 +24,7 @@ SQUIRRELS_DIR="$WORLD_ROOT/.alive/_squirrels"
 
 # Find the most recently created unsaved entry (most likely our session)
 ENTRY=$(ls -t "$SQUIRRELS_DIR/"*.yaml 2>/dev/null | while read -r f; do
-  grep -q 'saves: 0' "$f" 2>/dev/null && echo "$f" && break
+  grep -q 'ended: null' "$f" 2>/dev/null && echo "$f" && break
 done)
 
 [ -z "$ENTRY" ] && exit 0

@@ -1,6 +1,6 @@
 ---
 name: open
-description: "Use when you names a walnut, says 'let's work on', 'open', 'switch to', 'resume', or 'where was I' — loads that walnut's core files in sequence, surfaces a spark, and establishes single-walnut focus for the session."
+description: "Use when the human names a walnut, says 'let's work on', 'open', 'switch to', 'resume', or 'where was I' — loads that walnut's core files in sequence, surfaces a spark, and establishes single-walnut focus for the session."
 user-invocable: true
 ---
 
@@ -57,7 +57,7 @@ Read in order (show `▸` reads):
 
 ## The Spark
 
-One observation you might not have seen. A connection, a question, a nudge.
+One observation the human might not have noticed. A connection, a question, a nudge.
 
 ```
 ╭─ 🐿️ spark
@@ -87,7 +87,7 @@ If there's not enough context for a genuine spark, skip it. An obvious one is wo
 
 - Stash in conversation (see squirrels.md). No file writes except capture + _working/.
 - Always watching: people updates, _working/ fits, capturable content.
-- When a _working/ file looks shareable → offer to publish via `alive:publish`.
+- When a _working/ file looks shareable → offer to promote to v1.
 
 ## Cross-Loading
 

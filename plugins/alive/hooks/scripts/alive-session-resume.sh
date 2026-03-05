@@ -27,7 +27,7 @@ PREFS=$(resolve_preferences "$WORLD_ROOT")
 SQUIRRELS_DIR="$WORLD_ROOT/.alive/_squirrels"
 LATEST_ENTRY=""
 if [ -d "$SQUIRRELS_DIR" ]; then
-  LATEST_ENTRY=$(grep -rl 'saves: 0' "$SQUIRRELS_DIR/"*.yaml 2>/dev/null | head -1)
+  LATEST_ENTRY=$(grep -rl 'ended: null' "$SQUIRRELS_DIR/"*.yaml 2>/dev/null | head -1)
 fi
 
 if [ -n "$LATEST_ENTRY" ]; then

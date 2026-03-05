@@ -1,6 +1,6 @@
 ---
 name: recall
-description: "Use when you want to resume a previous session, understand what happened in past work, or transfer context into a new conversation — searches session history, then rebuilds and delivers context as a structured briefing or handoff document."
+description: "Use when the human wants to resume a previous session, understand what happened in past work, or transfer context into a new conversation — searches session history, then rebuilds and delivers context as a structured briefing or handoff document."
 user-invocable: true
 ---
 
@@ -54,7 +54,7 @@ Show recent sessions across all walnuts.
 
 #### Unsigned Sessions
 
-After listing sessions, check for unsaved entries (`saves: 0`) in `.alive/_squirrels/`. These represent sessions that weren't properly closed — you may have lost stash items.
+After listing sessions, check for unsaved entries (`saves: 0`) in `.alive/_squirrels/`. These represent sessions that weren't properly closed — the human may have lost stash items.
 
 Surface them with a visual marker:
 
@@ -75,7 +75,7 @@ Surface them with a visual marker:
 ╰─
 ```
 
-If you selects an unsaved session, present the stash items from the YAML and offer to route them now (invoke save flow for those items) or dismiss (dismiss the entry by setting `ended:` to current time and `saves:` to -1 (dismissed)).
+If the human selects an unsaved session, present the stash items from the YAML and offer to route them now (invoke save flow for those items) or dismiss (dismiss the entry by setting `ended:` to current time and `saves:` to -1 (dismissed)).
 
 ### Query (by walnut, date, topic)
 
@@ -87,7 +87,7 @@ Searches tier 1 first (squirrel YAML frontmatter + stash content). If no match, 
 
 ### Revive (single session)
 
-You selects a session. Show the tier 1 metadata, then offer the choice:
+The human selects a session. Show the tier 1 metadata, then offer the choice:
 
 ```
 ╭─ 🐿️ recall — session:{id}
@@ -106,7 +106,7 @@ Use AskUserQuestion with two options:
 - **Quick revive** — "Structured briefing. One agent reads the full transcript and returns a handoff document covering what happened, why, and what comes next. ~2 minutes."
 - **Heavy revive** — "Full context transplant. Five parallel agents each extract a different dimension — narrative arc, decisions, verbatim quotes, technical substance, and open threads. Reconstructs the session's awareness in the current context window. ~5 minutes."
 
-Before dispatching either mode, resolve the transcript path (see Transcript Discovery below). If no transcript is found, tell you and offer a tier-1-only summary from the YAML stash data instead.
+Before dispatching either mode, resolve the transcript path (see Transcript Discovery below). If no transcript is found, tell the human and offer a tier-1-only summary from the YAML stash data instead.
 
 #### Quick Revive
 
@@ -136,7 +136,7 @@ Produce a structured handoff using EXACTLY this format:
 ## What You Need to Know
 
 [1-2 paragraphs. Write this for a squirrel with ZERO memory of this session. What was the
-session about? What walnut was being worked on? What was you trying to accomplish?
+session about? What walnut was being worked on? What was the human trying to accomplish?
 What state were things in when the session ended? This section alone should give enough
 context to have a useful conversation about this work.]
 
@@ -200,7 +200,7 @@ Present the agent's output in a bordered block:
 
 Full context transplant. Five parallel agents each extract a different dimension from the transcript — narrative arc, decisions, verbatim quotes, technical substance, and open threads.
 
-When you selects heavy revive, invoke the `alive:heavy-revive` skill via the Skill tool, passing the resolved `{transcript_path}`. That skill contains the full agent prompts and dispatch instructions. Do NOT attempt to run heavy revive without loading that skill first.
+When the human selects heavy revive, run the heavy revive flow: dispatch five parallel agents that each extract a different dimension from the transcript — narrative arc, decisions, verbatim quotes, technical substance, and open threads. Each agent reads the full JSONL transcript and returns its focused extraction. Combine the five extractions into a unified context briefing presented in a bordered block.
 
 ### Combine (multiple sessions → one context pack)
 
@@ -261,7 +261,7 @@ Different platforms store session data in different places. The squirrel resolve
 
 1. Check `transcript_path:` in the squirrel YAML entry
 2. **Fallback:** Scan `~/.claude/projects/*/` for `{session_id}*.jsonl` — Claude Code names transcripts using the session UUID
-3. If no transcript found: tell you, offer tier-1-only summary from the YAML stash data (no revive possible without a transcript)
+3. If no transcript found: tell the human, offer tier-1-only summary from the YAML stash data (no revive possible without a transcript)
 
 **Known platforms:**
 
@@ -276,7 +276,7 @@ Different platforms store session data in different places. The squirrel resolve
 
 **The squirrel entry is the universal layer.** It works across every platform. Transcripts are a bonus when the platform supports them. The system never breaks if transcripts aren't available — it just has less depth.
 
-**Privacy note:** Transcripts live on your machine in Claude Code's project directory. They never leave. Recall reads them locally.
+**Privacy note:** Transcripts live on the human's machine in Claude Code's project directory. They never leave. Recall reads them locally.
 
 ---
 

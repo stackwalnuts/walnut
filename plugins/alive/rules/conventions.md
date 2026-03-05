@@ -99,7 +99,7 @@ draft    iterated  refined   shareable
 
 - **v0.x** lives in `_core/_working/`. The squirrel's workspace. Nobody outside sees it.
 - **v1** is shareable. Promoted OUT of `_core/_working/` to live context (outside `_core/`). This is the graduation moment — when a working file is ready to send to another human.
-- **v1+** can be previewed/published via `alive:publish`.
+- **v1+** can be shared externally once promoted.
 
 ### Before Iterating
 
@@ -125,7 +125,7 @@ When a working file graduates to v1:
 1. Move/copy from `_core/_working/` to its proper location in live context
 2. Update version frontmatter to `v1`
 3. Log entry: "Promoted [name] to v1"
-4. Optionally: preview/publish via `alive:publish`
+4. Optionally: share externally once promoted
 
 ---
 

@@ -25,7 +25,7 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
 # Always allow: user overrides, preferences, world key, walnut-level config
 case "$FILE_PATH" in
-  */user-overrides.md|*/preferences.yaml|*/_core/config.yaml)
+  */overrides.md|*/user-overrides.md|*/preferences.yaml|*/_core/config.yaml)
     exit 0
     ;;
 esac

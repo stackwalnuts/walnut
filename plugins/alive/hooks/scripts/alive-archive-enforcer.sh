@@ -42,8 +42,8 @@ while IFS= read -r path; do
   # Check if resolved path is inside the World
   case "$resolved" in
     "$WORLD_ROOT"/01_Archive/*|"$WORLD_ROOT"/02_Life/*|"$WORLD_ROOT"/03_Inputs/*|"$WORLD_ROOT"/04_Ventures/*|"$WORLD_ROOT"/05_Experiments/*|"$WORLD_ROOT"/_core/*|"$WORLD_ROOT"/.alive/*)
-      echo "Blocked: deletion inside ALIVE folders. Archive instead — move to 01_Archive/." >&2
-      exit 2
+      echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"🐿️ Deletion blocked inside ALIVE folders. Archive instead — move to 01_Archive/."}}'
+      exit 0
       ;;
   esac
 done <<< "$TARGET"

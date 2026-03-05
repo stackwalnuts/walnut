@@ -41,7 +41,7 @@ fi
 SQUIRRELS_DIR="$WORLD_ROOT/.alive/_squirrels"
 ENTRY=""
 if [ -d "$SQUIRRELS_DIR" ]; then
-  ENTRY=$(grep -rl 'saves: 0' "$SQUIRRELS_DIR/"*.yaml 2>/dev/null | head -1)
+  ENTRY=$(grep -rl 'ended: null' "$SQUIRRELS_DIR/"*.yaml 2>/dev/null | head -1)
 fi
 
 # If no unsaved entry, allow stop

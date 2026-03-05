@@ -1,12 +1,12 @@
 ---
 name: create
-description: "Use when you want to start something new — a venture, experiment, person, life area, project, or campaign. Scaffolds the full walnut structure, maps existing context sources, and optionally migrates files across."
+description: "Use when the human wants to start something new — a venture, experiment, person, life area, project, or campaign. Scaffolds the full walnut structure, maps existing context sources, and optionally migrates files across."
 user-invocable: true
 ---
 
 # Create
 
-Scaffold a new walnut — any type, any ALIVE domain. Understand it first, map where its context lives, then scaffold. Optionally bring in existing content (Step 7 — only if you have files to migrate).
+Scaffold a new walnut — any type, any ALIVE domain. Understand it first, map where its context lives, then scaffold. Optionally bring in existing content (Step 7 — only if the human has files to migrate).
 
 Not a setup wizard (that's `world/setup.md` — first-time only). Not opening an existing walnut (that's `alive:open`).
 
@@ -37,7 +37,7 @@ templates/squirrel/entry.yaml → _core/_squirrels/{session_id}.yaml
 | `{{session_id}}` | Current session ID |
 | `{{engine}}` | Current model (e.g. `claude-opus-4-6`) |
 | `{{walnut}}` | Same as `{{name}}` |
-| `{{description}}` | You's free text from Step 2, lightly cleaned |
+| `{{description}}` | The human's free text from Step 2, lightly cleaned |
 
 ---
 
@@ -114,7 +114,7 @@ Most new walnuts already have context scattered across tools. Map it now so the 
 ╭─ 🐿️ context map
 │  Where does context for this currently live outside
 │  your head? Knowing this helps me find things later
-│  and reminds you what to bring in.
+│  and reminds the human what to bring in.
 │
 │  Think about:
 │  · Email threads (Gmail, Outlook)
@@ -169,7 +169,7 @@ Present everything gathered so far:
 ╰─
 ```
 
-If you picks "change name" / "change type" / "change rhythm", ask once, then re-present the confirmation.
+If the human picks "change name" / "change type" / "change rhythm", ask once, then re-present the confirmation.
 
 ### Step 6 — Scaffold
 
@@ -182,7 +182,7 @@ Follow the 9-step process from `conventions.md § Creating a New Walnut` exactly
 5. Fill key.md frontmatter: type, goal, created (today), rhythm, people (from Step 3), tags (from Step 3)
 6. Fill key.md body: description from Step 3, `## Key People` with roles, `## Context Map` from Step 4, `## Connections` with any wikilinks to existing walnuts
 7. Write first log entry: "Walnut created. {goal}" — signed with session_id
-8. If sub-alive: set `parent: [[parent-name]]` in key.md frontmatter
+8. If sub-walnut: set `parent: [[parent-name]]` in key.md frontmatter
 9. Add `[[new-walnut-name]]` to parent's key.md `links:` frontmatter field
 
 ```
@@ -204,7 +204,7 @@ Follow the 9-step process from `conventions.md § Creating a New Walnut` exactly
 
 ### Step 7 — Existing Content Check
 
-**DO NOT read `create/migrate.md` until you answers "yes" below. It is a large file that must not be loaded into context unless needed. Most walnut creations will skip this step entirely.**
+**DO NOT read `create/migrate.md` until the human answers "yes" below. It is a large file that must not be loaded into context unless needed. Most walnut creations will skip this step entirely.**
 
 ```
 ╭─ 🐿️ got files to bring in?

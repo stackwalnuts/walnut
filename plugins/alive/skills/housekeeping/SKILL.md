@@ -1,6 +1,6 @@
 ---
 name: housekeeping
-description: "Use when you asks for a system check, mentions anything stale or broken, or wants maintenance — scans squirrel activity across all walnuts then surfaces unsigned entries, stale walnuts past their rhythm, orphan references, stale drafts, overdue tasks, and unrouted inputs one issue at a time."
+description: "Use when the human asks for a system check, mentions anything stale or broken, or wants maintenance — scans squirrel activity across all walnuts then surfaces unsigned entries, stale walnuts past their rhythm, orphan references, stale drafts, overdue tasks, and unrouted inputs one issue at a time."
 user-invocable: true
 ---
 
@@ -31,7 +31,7 @@ Before checking for problems, get the lay of the land. Scan `_core/_squirrels/` 
 
 ## Step 2: Issues (one at a time, with recommended fix)
 
-Each issue surfaces with context AND a recommended action. You picks.
+Each issue surfaces with context AND a recommended action. The human picks.
 
 ### 2a. Unsigned Squirrel Entries
 
@@ -131,7 +131,7 @@ If now.md context paragraph is empty, hasn't been updated in 2+ weeks, or doesn'
 
 ## Presentation
 
-**One at a time.** Surface the highest priority issue with a recommended fix. Let you deal with it. Then surface the next.
+**One at a time.** Surface the highest priority issue with a recommended fix. Let the human deal with it. Then surface the next.
 
 ```
 ╭─ 🐿️ housekeeping complete

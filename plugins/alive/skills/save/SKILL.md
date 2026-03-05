@@ -1,6 +1,6 @@
 ---
 name: save
-description: "Use when you say to save, checkpoint, wrap up, or route accumulated context — runs the full save protocol: confirms stash items, writes a signed log entry, updates now.md and tasks.md, dispatches cross-walnut notes, and resets the stash so the session can continue."
+description: "Use when the human says to save, checkpoint, wrap up, or route accumulated context — runs the full save protocol: confirms stash items, writes a signed log entry, updates now.md and tasks.md, dispatches cross-walnut notes, and resets the stash so the session can continue."
 user-invocable: true
 ---
 
@@ -180,13 +180,13 @@ Session continues. Stash resets for next checkpoint.
 ╰─
 ```
 
-The check suggestion is lightweight — one line. If you ignores it, no friction. If they say "check" or "yeah", invoke `alive:housekeeping`.
+The check suggestion is lightweight — one line. If the human ignores it, no friction. If they say "check" or "yeah", invoke `alive:housekeeping`.
 
 ---
 
 ## On Actual Session Exit
 
-When the session truly ends (stop hook, explicit "I'm done done", you leave):
+When the session truly ends (stop hook, explicit "I'm done done", the human leaves):
 
 - Update the squirrel entry in `.alive/_squirrels/{session_id}.yaml`:
   - Set `ended:` to current timestamp

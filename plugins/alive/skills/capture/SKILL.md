@@ -123,7 +123,7 @@ squirrel: 2a8c95e9
 # Transcript
 ---
 type: transcript
-participants: [You, Jax Stellara, Dr. Elara Voss]
+participants: [[name], Jax Stellara, Dr. Elara Voss]
 duration: 45m
 platform: Fathom
 date: 2026-02-23

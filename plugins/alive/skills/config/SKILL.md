@@ -1,6 +1,6 @@
 ---
 name: config
-description: "Use when you want to change how the system behaves — toggle preferences, apply walnut-level voice or capture settings, codify a repeatable process as a custom skill, or audit current configuration. Routes to preferences.yaml, walnut config, or a new skill file depending on scope."
+description: "Use when the human wants to change how the system behaves — toggle preferences, apply walnut-level voice or capture settings, codify a repeatable process as a custom skill, or audit current configuration. Routes to preferences.yaml, walnut config, or a new skill file depending on scope."
 user-invocable: true
 ---
 
@@ -23,7 +23,7 @@ Customize how the system works. Four levels, from simplest to most complex.
 
 ## How It Routes
 
-When you say "I want X":
+When the human says "I want X":
 
 1. **Is it a toggle?** → Write to `preferences.yaml`. Takes effect immediately.
 2. **Is it walnut-specific?** → Write YAML config to that walnut's `_core/`. Different walnuts, different settings.

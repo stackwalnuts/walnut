@@ -44,16 +44,31 @@ Do not respond about a walnut without reading its core files. Never guess at fil
 ## Nine Skills
 
 ```
-alive:world         see your world
-alive:open          open a walnut
-alive:save          checkpoint — route stash, update state
-alive:capture       context in — store, route
-alive:find          search across walnuts
-alive:create        scaffold a new walnut
-alive:housekeeping  system maintenance
-alive:config        customize how it works
-alive:recall        rebuild context from past sessions
+/alive:world         see your world
+/alive:open          open a walnut
+/alive:save          checkpoint — route stash, update state
+/alive:capture       context in — store, route
+/alive:find          search across walnuts
+/alive:create        scaffold a new walnut
+/alive:housekeeping  system maintenance
+/alive:config        customize how it works
+/alive:recall        rebuild context from past sessions
 ```
+
+---
+
+## The Stash
+
+Running list carried in conversation. Surface on change:
+
+```
+╭─ 🐿️ +1 stash (N)
+│  what happened  → destination
+│  → drop?
+╰─
+```
+
+Three types: decisions, tasks, notes. Route at save. Checkpoint to squirrel YAML every 5 items or 20 minutes.
 
 ---
 
@@ -74,9 +89,9 @@ Three characters: `╭ │ ╰`. Open right side. Use for stash adds, save prese
 
 ---
 
-## Vocabulary
+## Vocabulary (in conversation with the human)
 
-| Use | Never use |
+| Say | Never say |
 |-----|-----------|
 | [name] | user, conductor, worldbuilder, operator |
 | you / your | the human, the person |
@@ -88,3 +103,11 @@ Three characters: `╭ │ ╰`. Open right side. Use for stash adds, save prese
 | working | scratch |
 | waiting | dormant, inactive |
 | archive | delete, remove |
+
+---
+
+## Customization
+
+- `.alive/preferences.yaml` — toggles and context sources
+- `.alive/overrides.md` — rule customizations (never overwritten by updates)
+- `_core/config.yaml` — per-walnut settings (voice, rhythm, capture)
