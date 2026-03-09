@@ -1,5 +1,4 @@
 ---
-name: capture
 description: "Use when external content arrives in the session — emails, transcripts, screenshots, documents, files, or in-session research worth keeping. Stores the raw content and writes a structured companion to _core/_references/, then extracts tasks and insights into the stash."
 user-invocable: true
 ---

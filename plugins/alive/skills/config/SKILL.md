@@ -1,5 +1,4 @@
 ---
-name: config
 description: "Use when the human wants to change how the system behaves — toggle preferences, apply walnut-level voice or capture settings, codify a repeatable process as a custom skill, or audit current configuration. Routes to preferences.yaml, walnut config, or a new skill file depending on scope."
 user-invocable: true
 ---

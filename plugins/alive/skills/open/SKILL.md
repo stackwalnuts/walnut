@@ -1,5 +1,4 @@
 ---
-name: open
 description: "Use when the human names a walnut, says 'let's work on', 'open', 'switch to', 'resume', or 'where was I' — loads that walnut's core files in sequence, surfaces a spark, and establishes single-walnut focus for the session."
 user-invocable: true
 ---

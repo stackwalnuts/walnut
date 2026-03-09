@@ -1,5 +1,4 @@
 ---
-name: world
 description: "Use when the human wants a dashboard view of all active walnuts, feels lost, or is unsure what to work on next. Renders a live world view grouped by ALIVE domain — priorities, attention items, full walnut tree, and recent activity — then routes to open, housekeeping, find, or recall."
 user-invocable: true
 ---

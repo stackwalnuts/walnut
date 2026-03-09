@@ -1,5 +1,4 @@
 ---
-name: save
 description: "Use when the human says to save, checkpoint, wrap up, or route accumulated context — runs the full save protocol: confirms stash items, writes a signed log entry, updates now.md and tasks.md, dispatches cross-walnut notes, and resets the stash so the session can continue."
 user-invocable: true
 ---

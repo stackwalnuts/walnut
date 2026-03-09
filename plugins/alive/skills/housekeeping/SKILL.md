@@ -1,5 +1,4 @@
 ---
-name: housekeeping
 description: "Use when the human asks for a system check, mentions anything stale or broken, or wants maintenance — scans squirrel activity across all walnuts then surfaces unsigned entries, stale walnuts past their rhythm, orphan references, stale drafts, overdue tasks, and unrouted inputs one issue at a time."
 user-invocable: true
 ---

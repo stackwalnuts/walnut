@@ -1,5 +1,4 @@
 ---
-name: create
 description: "Use when the human wants to start something new — a venture, experiment, person, life area, project, or campaign. Scaffolds the full walnut structure, maps existing context sources, and optionally migrates files across."
 user-invocable: true
 ---

@@ -1,5 +1,4 @@
 ---
-name: recall
 description: "Use when the human wants to resume a previous session, understand what happened in past work, or transfer context into a new conversation — searches session history, then rebuilds and delivers context as a structured briefing or handoff document."
 user-invocable: true
 ---
