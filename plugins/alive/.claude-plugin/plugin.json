@@ -1,6 +1,6 @@
 {
   "name": "alive",
-  "version": "0.1.0-beta",
+  "version": "1.0.0-beta",
   "description": "A context system for your world. Your emails, your people, your projects, your history — structured as plain files, readable by any AI.",
   "author": {
     "name": "Alive Computer",

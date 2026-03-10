@@ -1,6 +1,6 @@
 ---
-version: 0.1.0-beta
-runtime: squirrel.core@0.2
+version: 1.0.0-beta
+runtime: squirrel.core@1.0
 ---
 
 # ALIVE

@@ -1,5 +1,5 @@
 ---
-version: 0.1.0-beta
+version: 1.0.0-beta
 type: foundational
 description: The squirrel caretaker runtime. Session model, stash mechanic, save flow, visual conventions.
 ---
@@ -17,7 +17,7 @@ A squirrel is one instance of the caretaker runtime operating inside a walnut. Y
 | **Squirrel** | The caretaker runtime. Rules + hooks + skills + policies. The role any agent inhabits. |
 | **Agent instance** | The execution engine. Claude, GPT, Codex, local model — interchangeable. |
 | **Session** | One conversation between the human and an agent running the squirrel runtime. |
-| **runtime_id** | Caretaker version. `squirrel.core@0.2` |
+| **runtime_id** | Caretaker version. `squirrel.core@1.0` |
 | **session_id** | One conversation. Provided by the AI platform. |
 | **engine** | Which model ran. `claude-opus-4-6` |
 
@@ -191,7 +191,7 @@ One YAML file per session in `_core/_squirrels/`. Created by session-start hook,
 
 ```yaml
 session_id: 2a8c95e9
-runtime_id: squirrel.core@0.2
+runtime_id: squirrel.core@1.0
 engine: claude-opus-4-6
 walnut: nova-station
 started: 2026-02-23T12:00:00

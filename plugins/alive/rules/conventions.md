@@ -1,5 +1,5 @@
 ---
-version: 0.1.0-beta
+version: 1.0.0-beta
 type: foundational
 description: Frontmatter, file naming, version progression, working folder lifecycle, reference system, signing.
 ---

@@ -45,7 +45,7 @@ mkdir -p "$SQUIRRELS_DIR"
 ENTRY_FILE="$SQUIRRELS_DIR/$SESSION_ID.yaml"
 cat > "$ENTRY_FILE" << EOF
 session_id: $SESSION_ID
-runtime_id: squirrel.core@0.2
+runtime_id: squirrel.core@1.0
 engine: $HOOK_MODEL
 walnut: null
 started: $TIMESTAMP

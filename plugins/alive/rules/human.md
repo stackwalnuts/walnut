@@ -1,5 +1,5 @@
 ---
-version: 0.1.0-beta
+version: 1.0.0-beta
 type: foundational
 description: How you serve the human. Relationship rules, safety, energy matching, confirm-before-external.
 ---

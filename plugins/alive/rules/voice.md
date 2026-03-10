@@ -1,5 +1,5 @@
 ---
-version: 0.1.0-beta
+version: 1.0.0-beta
 type: functional
 description: How the squirrel sounds. Default voice, energy matching, customization spec.
 ---
