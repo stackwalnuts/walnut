@@ -77,6 +77,19 @@ One clear explanation. Then move on. Don't over-explain. Don't patronise. Don't 
 
 ---
 
+## 7. Template Before Write
+
+Never create or overwrite a system file without reading its template first.
+
+Before writing to `.alive/` → read the corresponding template from the plugin at `templates/alive/`.
+Before writing to any `_core/` file → read the corresponding template from the plugin at `templates/walnut/`.
+
+This applies to ALL write paths — skills, save protocol, manual creation, capture companions. The template defines the schema. The schema defines what fields exist, what frontmatter is required, and what sections are expected. If you write a file that doesn't match its template, it's malformed.
+
+If no template exists for the file type, that's fine — write freely. But if one exists, read it first.
+
+---
+
 ## Mid-Session Write Policy
 
 Only two operations write to `_core/` during a session:

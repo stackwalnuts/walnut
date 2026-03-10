@@ -14,7 +14,69 @@ read_hook_input
 read_session_fields
 
 # Find world root
-find_world || { echo "No ALIVE world found."; exit 0; }
+if ! find_world; then
+  # No world found — still inject rules so the AI knows how to run setup
+  PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+
+  RUNTIME_RULES=""
+  RULE_COUNT=0
+  RULE_NAMES=""
+
+  if [ -f "$PLUGIN_ROOT/CLAUDE.md" ]; then
+    RUNTIME_RULES=$(cat "$PLUGIN_ROOT/CLAUDE.md")
+  fi
+
+  for rule_file in "$PLUGIN_ROOT/rules/"*.md; do
+    if [ -f "$rule_file" ]; then
+      RULE_COUNT=$((RULE_COUNT + 1))
+      RULE_NAME=$(basename "$rule_file" .md)
+      RULE_NAMES="${RULE_NAMES}${RULE_NAMES:+, }${RULE_NAME}"
+      RUNTIME_RULES="${RUNTIME_RULES}
+
+$(cat "$rule_file")"
+    fi
+  done
+
+  # Check for world-seed.md in PWD
+  SEED_STATUS="none"
+  if [ -f "${HOOK_CWD}/world-seed.md" ]; then
+    SEED_STATUS="found at ${HOOK_CWD}/world-seed.md"
+  fi
+
+  # Onboarding HTML path
+  ONBOARDING_HTML="$PLUGIN_ROOT/onboarding/world-builder.html"
+
+  # Setup signal
+  SETUP_MSG="ALIVE plugin loaded but NO WORLD FOUND in ${HOOK_CWD}.
+Model: ${HOOK_MODEL:-unknown}
+World seed: $SEED_STATUS
+Onboarding questionnaire: $ONBOARDING_HTML
+
+This appears to be a fresh install. The user needs to set up their world.
+Run /alive:world to start — it will detect the fresh install and route to setup."
+
+  PREAMBLE="<EXTREMELY_IMPORTANT>
+The following are your core operating rules for the ALIVE system. They are MANDATORY — not suggestions, not defaults, not guidelines. You MUST follow them in every response, every tool call, every session.
+</EXTREMELY_IMPORTANT>"
+
+  SETUP_ESCAPED=$(escape_for_json "$SETUP_MSG")
+  PREAMBLE_ESCAPED=$(escape_for_json "$PREAMBLE")
+  RUNTIME_ESCAPED=$(escape_for_json "$RUNTIME_RULES")
+
+  CONTEXT="${SETUP_ESCAPED}\n\n${PREAMBLE_ESCAPED}\n\n${RUNTIME_ESCAPED}"
+
+  cat <<HOOKEOF
+{
+  "additional_context": "${CONTEXT}",
+  "hookSpecificOutput": {
+    "hookEventName": "SessionStart",
+    "additionalContext": "${CONTEXT}"
+  }
+}
+HOOKEOF
+
+  exit 0
+fi
 
 # Use Claude Code's session ID, fall back to random only if missing
 SESSION_ID="${HOOK_SESSION_ID}"
