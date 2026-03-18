@@ -41,9 +41,7 @@ tags: []
 
 ## Tasks
 
-Capsule-scoped work items. Same syntax as walnut tasks.md.
-
-- [ ] Example task  @session_id
+Tasks for this capsule live in the walnut's `_core/tasks.md` under a capsule heading. Do not duplicate tasks here.
 
 ## Changelog
 

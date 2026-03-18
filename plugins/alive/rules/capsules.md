@@ -70,7 +70,7 @@ tags: [engineering, vendors]
 ### Body Sections
 
 - `## Context` — what this capsule is about, current state
-- `## Tasks` — capsule-scoped checkboxes with @session_id attribution. Same syntax as walnut tasks.md.
+- `## Tasks` — pointer to `_core/tasks.md`. Capsule tasks live in the walnut task list under a capsule heading, not in the companion.
 - `## Changelog` — every version after v0.1 gets a brief note about what changed
 - `## Work Log` — append-only. Each session adds its entry at the bottom. Never edit previous entries.
 
@@ -165,7 +165,7 @@ If two capsules overlap, link them or spawn a third that synthesizes both. Only 
 
 ### 2. Capsule-scoped tasks
 
-`## Tasks` in companion body with checkbox + @session_id. `[~]` means actively being worked on.
+Capsule tasks live in the walnut's `_core/tasks.md` under a heading matching the capsule name. Not in the companion. This prevents split source of truth.
 
 ### 3. Append-only work log
 
