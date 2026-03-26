@@ -1,6 +1,9 @@
 {
   "name": "walnut",
-  "owner": "stackwalnuts",
+  "owner": {
+    "name": "Stack Walnuts",
+    "email": "hello@walnut.world"
+  },
   "metadata": {
     "description": "Your life in walnuts. A personal context system — structured units of knowledge and work on your machine, connected to everything. Gather from any source. Curate with any AI. Prototype and ship through capsules. Share on walnut.world. Earn from what you build.",
     "version": "1.0.0"
