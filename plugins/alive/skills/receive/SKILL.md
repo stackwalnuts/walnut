@@ -127,11 +127,13 @@ fi
 
 # Validate archive members AND extract safely via Python tarfile
 python3 -c '
-import tarfile, sys, os
+import tarfile, sys, os, unicodedata
 
 MAX_MEMBERS = 10000
 MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
 MAX_PATH_LEN = 512
+# tarfile type codes for PAX/GNU metadata (allow but skip extraction)
+TAR_METADATA_TYPES = {tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK}
 
 staging = sys.argv[1]
 archive_path = sys.argv[2]
@@ -139,50 +141,67 @@ staging_real = os.path.realpath(staging)
 violations = []
 seen_names = set()
 total_bytes = 0
-
-def safe_name(raw):
-    n = os.path.normpath(raw)
-    while n.startswith("./"):
-        n = n[2:]
-    return n
+count = 0
+safe_members = []
 
 with tarfile.open(archive_path, "r:gz") as tf:
-    members = tf.getmembers()
-    if len(members) > MAX_MEMBERS:
-        print(f"Too many members: {len(members)} (max {MAX_MEMBERS})", file=sys.stderr)
-        sys.exit(1)
-    for member in members:
-        name = safe_name(member.name)
+    for member in tf:
+        count += 1
+        if count > MAX_MEMBERS:
+            violations.append(f"Too many members (>{MAX_MEMBERS})")
+            break
+
+        raw = member.name
+        # Check raw name for traversal BEFORE normalization (normpath erases internal ..)
+        if ".." in raw.split("/"):
+            violations.append(f"Path traversal in raw name: {raw}")
+            continue
+        # Reject control characters in paths (ASCII C0, DEL, C1)
+        if any(ord(c) < 0x20 or 0x7f <= ord(c) <= 0x9f for c in raw):
+            violations.append(f"Control characters in path: {repr(raw)}")
+            continue
+
+        # Normalize for display/comparison
+        name = os.path.normpath(raw)
+        while name.startswith("./"):
+            name = name[2:]
+
+        # Allow tar metadata entries (PAX, GNU longname) but skip extraction
+        if member.type in TAR_METADATA_TYPES:
+            continue
+        # Reject symlinks and hardlinks
         if member.issym() or member.islnk():
             violations.append(f"Link rejected: {name}")
             continue
+        # Reject special file types (devices, FIFOs, etc.)
         if not (member.isreg() or member.isdir()):
             violations.append(f"Special file rejected: {name} (type={member.type})")
             continue
+
         if len(name) > MAX_PATH_LEN:
             violations.append(f"Path too long: {name[:80]}... ({len(name)} chars)")
             continue
-        if ".." in name.split("/"):
-            violations.append(f"Path traversal: {name}")
         if os.path.isabs(name):
             violations.append(f"Absolute path: {name}")
         resolved = os.path.normpath(os.path.join(staging_real, name))
         if not resolved.startswith(staging_real + os.sep) and resolved != staging_real:
             violations.append(f"Path escape: {name}")
-        lower_name = name.lower()
-        if lower_name in seen_names:
-            violations.append(f"Duplicate path (case-insensitive): {name}")
-        seen_names.add(lower_name)
+        # Case-insensitive + Unicode-normalized duplicate detection (macOS APFS/HFS+)
+        canon = unicodedata.normalize("NFC", name).casefold()
+        if canon in seen_names:
+            violations.append(f"Duplicate path (case/unicode-insensitive): {name}")
+        seen_names.add(canon)
         if member.isreg():
             total_bytes += member.size
             if total_bytes > MAX_TOTAL_BYTES:
                 violations.append(f"Total size exceeds {MAX_TOTAL_BYTES} byte cap")
                 break
+        safe_members.append(member)
+
     if violations:
         for v in violations:
             print(v, file=sys.stderr)
         sys.exit(1)
-    safe_members = [m for m in members if m.isreg() or m.isdir()]
     tf.extractall(staging, members=safe_members)
 print(f"{len(safe_members)} members extracted safely.")
 ' "$STAGING" "$DECRYPTED"
@@ -206,12 +225,14 @@ Validate and extract safely using Python's `tarfile` module:
 STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
 trap 'rm -rf "$STAGING"' EXIT
 
+# Same validation as encrypted path above
 python3 -c '
-import tarfile, sys, os
+import tarfile, sys, os, unicodedata
 
 MAX_MEMBERS = 10000
 MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_PATH_LEN = 512
+TAR_METADATA_TYPES = {tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK}
 
 staging = sys.argv[1]
 archive_path = sys.argv[2]
@@ -219,20 +240,27 @@ staging_real = os.path.realpath(staging)
 violations = []
 seen_names = set()
 total_bytes = 0
-
-def safe_name(raw):
-    n = os.path.normpath(raw)
-    while n.startswith("./"):
-        n = n[2:]
-    return n
+count = 0
+safe_members = []
 
 with tarfile.open(archive_path, "r:gz") as tf:
-    members = tf.getmembers()
-    if len(members) > MAX_MEMBERS:
-        print(f"Too many members: {len(members)} (max {MAX_MEMBERS})", file=sys.stderr)
-        sys.exit(1)
-    for member in members:
-        name = safe_name(member.name)
+    for member in tf:
+        count += 1
+        if count > MAX_MEMBERS:
+            violations.append(f"Too many members (>{MAX_MEMBERS})")
+            break
+        raw = member.name
+        if ".." in raw.split("/"):
+            violations.append(f"Path traversal in raw name: {raw}")
+            continue
+        if any(ord(c) < 0x20 or 0x7f <= ord(c) <= 0x9f for c in raw):
+            violations.append(f"Control characters in path: {repr(raw)}")
+            continue
+        name = os.path.normpath(raw)
+        while name.startswith("./"):
+            name = name[2:]
+        if member.type in TAR_METADATA_TYPES:
+            continue
         if member.issym() or member.islnk():
             violations.append(f"Link rejected: {name}")
             continue
@@ -242,27 +270,25 @@ with tarfile.open(archive_path, "r:gz") as tf:
         if len(name) > MAX_PATH_LEN:
             violations.append(f"Path too long: {name[:80]}... ({len(name)} chars)")
             continue
-        if ".." in name.split("/"):
-            violations.append(f"Path traversal: {name}")
         if os.path.isabs(name):
             violations.append(f"Absolute path: {name}")
         resolved = os.path.normpath(os.path.join(staging_real, name))
         if not resolved.startswith(staging_real + os.sep) and resolved != staging_real:
             violations.append(f"Path escape: {name}")
-        lower_name = name.lower()
-        if lower_name in seen_names:
-            violations.append(f"Duplicate path (case-insensitive): {name}")
-        seen_names.add(lower_name)
+        canon = unicodedata.normalize("NFC", name).casefold()
+        if canon in seen_names:
+            violations.append(f"Duplicate path (case/unicode-insensitive): {name}")
+        seen_names.add(canon)
         if member.isreg():
             total_bytes += member.size
             if total_bytes > MAX_TOTAL_BYTES:
                 violations.append(f"Total size exceeds {MAX_TOTAL_BYTES} byte cap")
                 break
+        safe_members.append(member)
     if violations:
         for v in violations:
             print(v, file=sys.stderr)
         sys.exit(1)
-    safe_members = [m for m in members if m.isreg() or m.isdir()]
     tf.extractall(staging, members=safe_members)
 print(f"{len(safe_members)} members extracted safely.")
 ' "$STAGING" "<package-path>"
@@ -286,7 +312,7 @@ Note: The `tarfile` module handles both GNU tar and BSD tar archives, PAX extend
 Step 2 already validates archive members via Python's `tarfile` and only extracts regular files and directories. This step is defense-in-depth -- it walks the extracted filesystem to catch anything unexpected:
 
 ```bash
-python3 -c "
+python3 -c '
 import os, sys, stat
 
 staging = sys.argv[1]
@@ -297,35 +323,25 @@ for root, dirs, files in os.walk(staging, followlinks=False):
     for name in dirs + files:
         full = os.path.join(root, name)
         rel = os.path.relpath(full, staging)
-
-        # Reject .. components
-        if '..' in rel.split(os.sep):
-            violations.append(f'Path traversal: {rel}')
-
-        # Reject symlinks (all of them -- a symlink safe in staging
-        # can become an escape when copied to a different target tree)
+        if ".." in rel.split(os.sep):
+            violations.append(f"Path traversal: {rel}")
         if os.path.islink(full):
             target = os.readlink(full)
-            violations.append(f'Symlink rejected: {rel} -> {target}')
+            violations.append(f"Symlink rejected: {rel} -> {target}")
             continue
-
-        # Reject special file types (device nodes, FIFOs, sockets)
         st = os.lstat(full)
         if not (stat.S_ISREG(st.st_mode) or stat.S_ISDIR(st.st_mode)):
-            violations.append(f'Special file rejected: {rel} (mode {oct(st.st_mode)})')
-
-        # Verify path resolves inside staging
+            violations.append(f"Special file rejected: {rel} (mode {oct(st.st_mode)})")
         real = os.path.realpath(full)
         if real != staging_real and not real.startswith(staging_real + os.sep):
-            violations.append(f'Path escape: {rel} resolves to {real}')
+            violations.append(f"Path escape: {rel} resolves to {real}")
 
 if violations:
     for v in violations:
         print(v, file=sys.stderr)
     sys.exit(1)
-else:
-    print('All paths safe.')
-" "$STAGING"
+print("All paths safe.")
+' "$STAGING"
 ```
 
 If any violations are found, abort the import and clean up staging:
@@ -348,10 +364,17 @@ rm -rf "$STAGING"
 
 ### Step 4 -- Manifest Validation
 
-Read `manifest.yaml` from the staging root:
+Read `manifest.yaml` from the staging root. **Do NOT `cat` directly** -- manifest content is untrusted. Read via Python and strip control characters before displaying:
 
 ```bash
-cat "$STAGING/manifest.yaml"
+python3 -c '
+import sys
+with open(sys.argv[1]) as f:
+    text = f.read()
+# Strip ASCII control chars (C0 except \n\r\t, DEL, C1 range)
+cleaned = "".join(c if (c in "\n\r\t" or 0x20 <= ord(c) < 0x7f or ord(c) > 0x9f) else "?" for c in text)
+print(cleaned)
+' "$STAGING/manifest.yaml"
 ```
 
 #### 4a. Format version check
@@ -408,7 +431,9 @@ with open(manifest_path) as f:
     manifest_text = f.read()
 
 # Regex matches the manifest template exact structure (avoids PyYAML dependency).
-# If the manifest uses different formatting, this will fail closed (no entries = abort).
+# CONSTRAINT: manifest must use LF line endings, lowercase hex sha256, exact key
+# ordering (path/sha256/size), and standard YAML quoting. The share skill enforces
+# this format. If a manifest uses different formatting, this fails closed (no entries = abort).
 ENTRY_RE = re.compile(
     r"- path: \"?([^\"\n]+)\"?\n\s+sha256: \"?([a-f0-9]{64})\"?\n\s+size: (\d+)"
 )
@@ -547,20 +572,19 @@ If any capsules have `sensitivity: restricted` or `pii: true`, surface prominent
 Routing depends on scope. **All target paths MUST resolve inside the world root.** Before writing anything, verify:
 
 ```bash
-# Resolve target and world root, confirm target is inside world
-python3 -c "
+python3 -c '
 import os, sys
 target = os.path.realpath(sys.argv[1])
 world = os.path.realpath(sys.argv[2])
 try:
     common = os.path.commonpath([target, world])
 except ValueError:
-    common = ''
+    common = ""
 if common != world or target == world:
-    print(f'Target {target} is not inside world root {world}', file=sys.stderr)
+    print(f"Target {target} is not inside world root {world}", file=sys.stderr)
     sys.exit(1)
-print('Target path validated.')
-" "<target-path>" "<world-root>"
+print("Target path validated.")
+' "<target-path>" "<world-root>"
 ```
 
 #### Full scope
@@ -688,16 +712,14 @@ Update the log.md frontmatter (`last-entry`, `entry-count`, `summary`) via Edit.
 If the package includes `_core/tasks.md`, replace foreign `@session_id` references with `@[source-walnut-name]`:
 
 ```bash
-python3 -c "
+python3 -c '
 import re, sys, pathlib
-
 tasks_path = sys.argv[1]
 source = sys.argv[2]
 text = pathlib.Path(tasks_path).read_text()
-# Replace @<hex-session-id> with @[source-walnut]
-updated = re.sub(r'@([0-9a-f]{6,})', f'@[{source}]', text)
+updated = re.sub(r"@([0-9a-f]{6,})", f"@[{source}]", text)
 pathlib.Path(tasks_path).write_text(updated)
-" "<target-walnut>/_core/tasks.md" "<source-walnut-name>"
+' "<target-walnut>/_core/tasks.md" "<source-walnut-name>"
 ```
 
 **Update now.md** with import context via Edit:
@@ -837,11 +859,18 @@ if [ "$SHOULD_ARCHIVE" = "true" ]; then
   mkdir -p "$ARCHIVE_DIR"
 
   # If a file with the same name already exists, append timestamp
+  # Handles compound extensions: name.walnut.age -> name-TS.walnut.age
   BASENAME="$(basename "<package-path>")"
   if [ -e "$ARCHIVE_DIR/$BASENAME" ]; then
     TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-    # Preserve full extension (.walnut.age -> -TIMESTAMP.walnut.age)
-    BASENAME="${BASENAME%%.*}-${TIMESTAMP}.${BASENAME#*.}"
+    # Match known compound extensions, insert timestamp before them
+    case "$BASENAME" in
+      *.walnut.age) STEM="${BASENAME%.walnut.age}"; EXT="walnut.age" ;;
+      *.walnut.meta) STEM="${BASENAME%.walnut.meta}"; EXT="walnut.meta" ;;
+      *.walnut) STEM="${BASENAME%.walnut}"; EXT="walnut" ;;
+      *) STEM="${BASENAME%.*}"; EXT="${BASENAME##*.}" ;;
+    esac
+    BASENAME="${STEM}-${TIMESTAMP}.${EXT}"
   fi
   mv "<package-path>" "$ARCHIVE_DIR/$BASENAME"
 
@@ -849,7 +878,11 @@ if [ "$SHOULD_ARCHIVE" = "true" ]; then
   if [ -f "<meta-path>" ]; then
     META_BASE="$(basename "<meta-path>")"
     if [ -e "$ARCHIVE_DIR/$META_BASE" ]; then
-      META_BASE="${META_BASE%%.*}-${TIMESTAMP}.${META_BASE#*.}"
+      case "$META_BASE" in
+        *.walnut.meta) META_STEM="${META_BASE%.walnut.meta}"; META_EXT="walnut.meta" ;;
+        *) META_STEM="${META_BASE%.*}"; META_EXT="${META_BASE##*.}" ;;
+      esac
+      META_BASE="${META_STEM}-${TIMESTAMP}.${META_EXT}"
     fi
     mv "<meta-path>" "$ARCHIVE_DIR/$META_BASE"
   fi
