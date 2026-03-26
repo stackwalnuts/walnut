@@ -98,7 +98,7 @@ One clear explanation. Then move on. Don't over-explain. Don't patronise. Don't 
 
 Never create or overwrite a system file without reading its template first.
 
-Before writing to `.walnut/` → read the corresponding template from the plugin at `templates/alive/`.
+Before writing to `.walnut/` → read the corresponding template from the plugin at `templates/world/`.
 Before writing to any walnut system file (_core/key.md, _core/now.md, _core/log.md, _core/insights.md, _core/tasks.md) → read the corresponding template from `templates/walnut/`.
 Before creating a capsule companion → read `templates/capsule/companion.md`.
 

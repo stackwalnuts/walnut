@@ -30,7 +30,7 @@ links: []
      - **Slack** — via MCP server. Posts to channels, reads history.
      - **Notion** — via MCP server. Task management, knowledge base.
      - **Otter** — transcript sync script at ~/scripts/otter-sync.sh
-     - **GitHub** — via gh CLI. Repos: alivecomputer/walnut
+     - **GitHub** — via gh CLI. Repos: stackwalnuts/walnut
 -->
 
 ## Key People

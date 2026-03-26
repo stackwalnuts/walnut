@@ -400,7 +400,7 @@ Show:
 
 #### Step 2: World identity — .walnut/key.md
 
-Read the template from the plugin: `templates/alive/key.md`
+Read the template from the plugin: `templates/world/key.md`
 
 Replace template variables:
 - `{{name}}` → world name
@@ -434,7 +434,7 @@ Show:
 
 #### Step 3: Preferences — .walnut/preferences.yaml
 
-Read the template from the plugin: `templates/alive/preferences.yaml`
+Read the template from the plugin: `templates/world/preferences.yaml`
 
 If preferences were provided (Path A only), uncomment the relevant lines and set values.
 
@@ -460,7 +460,7 @@ Show:
 
 #### Step 4: Overrides — .walnut/overrides.md
 
-Read the template from the plugin: `templates/alive/overrides.md`
+Read the template from the plugin: `templates/world/overrides.md`
 
 Write as-is. No variable replacement needed.
 
