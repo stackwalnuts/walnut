@@ -22,6 +22,10 @@ templates/walnut-package/manifest.yaml     -- manifest template with field docs
 
 The squirrel MUST read both files before importing. Do not reconstruct the manifest schema from memory.
 
+**World root discovery:** The world root is the ALIVE folder containing `01_Archive/`, `02_Life/`, `03_Inputs/`, `04_Ventures/`, `05_Experiments/`. Discover it by walking up from the current walnut's path or by reading the `.alive/` directory location. All target paths for import MUST resolve inside this root.
+
+**Installed plugin version:** Read the plugin version from the ALIVE plugin's metadata (e.g. `walnut.manifest.yaml` at the plugin root, or use `"1.0.0"` if not determinable). This is needed for the plugin version compatibility check in Step 4b.
+
 ---
 
 ## Entry Points
@@ -107,42 +111,122 @@ If `age` is NOT installed, block:
 ╰─
 ```
 
-If `age` IS installed, decrypt to a temp location:
+If `age` IS installed, first validate archive member paths before extracting, then decrypt and extract:
 
 ```bash
-STAGING=$(mktemp -d "/tmp/walnut-import-XXXXX")
+STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
+
+# Pre-extraction: list archive members and validate paths BEFORE writing anything
+age -d "<package-path>" | tar -tzf - > /tmp/walnut-members.txt 2>&1
+DECRYPT_EXIT=$?
+if [ $DECRYPT_EXIT -ne 0 ]; then
+  rm -rf "$STAGING"
+  echo "Decryption or archive listing failed (exit $DECRYPT_EXIT)"
+  exit 1
+fi
+
+# Validate member paths before extraction (see Step 3)
+python3 -c "
+import sys
+violations = []
+for line in open(sys.argv[1]):
+    member = line.strip()
+    if not member:
+        continue
+    if '..' in member.split('/'):
+        violations.append(f'Path traversal: {member}')
+    if member.startswith('/'):
+        violations.append(f'Absolute path: {member}')
+if violations:
+    for v in violations:
+        print(v, file=sys.stderr)
+    sys.exit(1)
+print(f'{sum(1 for l in open(sys.argv[1]) if l.strip())} members validated.')
+" /tmp/walnut-members.txt
+
+if [ $? -ne 0 ]; then
+  rm -rf "$STAGING"
+  rm -f /tmp/walnut-members.txt
+  echo "Archive contains unsafe paths -- aborting"
+  exit 1
+fi
+
+rm -f /tmp/walnut-members.txt
+
+# Now extract (paths already validated)
 age -d "<package-path>" | tar -xzf - -C "$STAGING"
+if [ ${PIPESTATUS[0]} -ne 0 ] || [ ${PIPESTATUS[1]} -ne 0 ]; then
+  rm -rf "$STAGING"
+  echo "Decryption or extraction failed"
+  exit 1
+fi
 ```
 
-`age -d` prompts for the passphrase interactively in the terminal. The squirrel does not handle the passphrase.
+`age -d` prompts for the passphrase interactively in the terminal. The squirrel does not handle the passphrase. Note: the passphrase is entered twice (once for listing, once for extraction). This is the security tradeoff for pre-extraction validation.
 
 **If NOT encrypted:**
 
-Extract directly to staging:
+First validate archive member paths, then extract:
 
 ```bash
-STAGING=$(mktemp -d "/tmp/walnut-import-XXXXX")
+STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
+
+# Pre-extraction: validate member paths
+tar -tzf "<package-path>" > /tmp/walnut-members.txt 2>&1
+if [ $? -ne 0 ]; then
+  rm -rf "$STAGING"
+  echo "Archive listing failed -- file may be corrupted"
+  exit 1
+fi
+
+python3 -c "
+import sys
+violations = []
+for line in open(sys.argv[1]):
+    member = line.strip()
+    if not member:
+        continue
+    if '..' in member.split('/'):
+        violations.append(f'Path traversal: {member}')
+    if member.startswith('/'):
+        violations.append(f'Absolute path: {member}')
+if violations:
+    for v in violations:
+        print(v, file=sys.stderr)
+    sys.exit(1)
+print(f'{sum(1 for l in open(sys.argv[1]) if l.strip())} members validated.')
+" /tmp/walnut-members.txt
+
+if [ $? -ne 0 ]; then
+  rm -rf "$STAGING"
+  rm -f /tmp/walnut-members.txt
+  echo "Archive contains unsafe paths -- aborting"
+  exit 1
+fi
+
+rm -f /tmp/walnut-members.txt
+
+# Extract (paths already validated)
 tar -xzf "<package-path>" -C "$STAGING"
 ```
 
 ---
 
-### Step 3 -- Path Traversal Validation
+### Step 3 -- Post-Extraction Safety Validation
 
 **This is a security requirement. Do NOT skip.**
 
-Before reading any extracted content, validate every path in the staging directory:
+Step 2 already validated archive member paths before extraction. This step validates the extracted filesystem for anything that slipped through or was created by the extraction process:
 
 ```bash
-# Check for path traversal (..), absolute paths, and symlinks outside staging
 python3 -c "
-import os, sys
+import os, sys, stat
 
 staging = sys.argv[1]
 staging_real = os.path.realpath(staging)
 violations = []
 
-for root, dirs, files in os.walk(staging):
+for root, dirs, files in os.walk(staging, followlinks=False):
     for name in dirs + files:
         full = os.path.join(root, name)
         rel = os.path.relpath(full, staging)
@@ -151,15 +235,22 @@ for root, dirs, files in os.walk(staging):
         if '..' in rel.split(os.sep):
             violations.append(f'Path traversal: {rel}')
 
-        # Reject absolute path components embedded in names
-        if os.sep + os.sep in full:
-            violations.append(f'Suspicious path: {rel}')
-
-        # Reject symlinks pointing outside staging
+        # Reject symlinks (all of them -- a symlink safe in staging
+        # can become an escape when copied to a different target tree)
         if os.path.islink(full):
-            target = os.path.realpath(full)
-            if not target.startswith(staging_real + os.sep):
-                violations.append(f'Symlink escape: {rel} -> {target}')
+            target = os.readlink(full)
+            violations.append(f'Symlink rejected: {rel} -> {target}')
+            continue
+
+        # Reject special file types (device nodes, FIFOs, sockets)
+        st = os.lstat(full)
+        if not (stat.S_ISREG(st.st_mode) or stat.S_ISDIR(st.st_mode)):
+            violations.append(f'Special file rejected: {rel} (mode {oct(st.st_mode)})')
+
+        # Verify path resolves inside staging
+        real = os.path.realpath(full)
+        if real != staging_real and not real.startswith(staging_real + os.sep):
+            violations.append(f'Path escape: {rel} resolves to {real}')
 
 if violations:
     for v in violations:
@@ -230,36 +321,52 @@ Parse `source.plugin_version` from the manifest. Compare the major version again
 - **Major mismatch** -- block with a clear message about updating the plugin.
 - **Match** -- proceed.
 
-#### 4c. SHA-256 checksum validation
+#### 4c. SHA-256 checksum and size validation
 
-Validate every file listed in `manifest.files` against its `sha256` checksum:
+**Note on scope:** Checksums detect transit corruption and accidental modification. They do NOT provide authenticity -- a malicious sender can craft valid checksums. This is a known limitation of v1. Future versions may add signatures.
+
+Validate every file listed in `manifest.files` against its `sha256` checksum and `size`:
 
 ```bash
 python3 -c "
-import hashlib, sys, json, os
+import hashlib, sys, os, re, stat
 
-# Read manifest
-import re
 staging = sys.argv[1]
 manifest_path = os.path.join(staging, 'manifest.yaml')
 
-# Simple YAML parser for the files array
-# (avoids PyYAML dependency)
 with open(manifest_path) as f:
     manifest_text = f.read()
 
-# Extract files entries using regex
+# Extract files entries using regex (avoids PyYAML dependency).
+# This pattern matches the manifest template's exact structure.
 entries = []
-for m in re.finditer(r'- path: \"?([^\"\\n]+)\"?\\n\s+sha256: \"?([a-f0-9]{64})\"?\\n\s+size: (\d+)', manifest_text):
-    entries.append({'path': m.group(1), 'sha256': m.group(2), 'size': int(m.group(3))})
+for m in re.finditer(r'- path: \"?([^\"\\n]+)\"?\n\s+sha256: \"?([a-f0-9]{64})\"?\n\s+size: (\d+)', manifest_text):
+    entries.append({'path': m.group(1).strip(), 'sha256': m.group(2), 'size': int(m.group(3))})
 
 errors = []
 verified = 0
+
+# Guard: if no entries were parsed, something is wrong with the manifest
+if not entries:
+    print('No file entries found in manifest -- manifest may be malformed or empty.', file=sys.stderr)
+    sys.exit(1)
 
 for entry in entries:
     fpath = os.path.join(staging, entry['path'])
     if not os.path.exists(fpath):
         errors.append(f'Missing: {entry[\"path\"]}')
+        continue
+
+    # Verify it's a regular file (not a device node, FIFO, etc.)
+    st = os.lstat(fpath)
+    if not stat.S_ISREG(st.st_mode):
+        errors.append(f'Not a regular file: {entry[\"path\"]} (mode {oct(st.st_mode)})')
+        continue
+
+    # Verify size matches manifest
+    actual_size = st.st_size
+    if actual_size != entry['size']:
+        errors.append(f'Size mismatch: {entry[\"path\"]} (expected {entry[\"size\"]}, got {actual_size})')
         continue
 
     with open(fpath, 'rb') as f:
@@ -270,15 +377,15 @@ for entry in entries:
     else:
         verified += 1
 
-# Check for unlisted files
+# Check for unlisted files (anything in staging not in manifest)
+listed_paths = {e['path'] for e in entries}
 for root, dirs, files in os.walk(staging):
     for name in files:
         full = os.path.join(root, name)
         rel = os.path.relpath(full, staging)
         if rel == 'manifest.yaml':
             continue
-        listed = any(e['path'] == rel for e in entries)
-        if not listed:
+        if rel not in listed_paths:
             errors.append(f'Unlisted file: {rel}')
 
 if errors:
@@ -290,7 +397,7 @@ else:
 " "$STAGING"
 ```
 
-If any checksums fail or files are missing/unlisted, show the errors and abort:
+If any checksums fail, sizes mismatch, or files are missing/unlisted, show the errors and abort:
 
 ```
 ╭─ 🐿️ integrity check failed
@@ -345,7 +452,20 @@ If any capsules have `sensitivity: restricted` or `pii: true`, surface prominent
 
 ### Step 6 -- Target Selection
 
-Routing depends on scope.
+Routing depends on scope. **All target paths MUST resolve inside the world root.** Before writing anything, verify:
+
+```bash
+# Resolve target and world root, confirm target is inside world
+python3 -c "
+import os, sys
+target = os.path.realpath(sys.argv[1])
+world = os.path.realpath(sys.argv[2])
+if not target.startswith(world + os.sep):
+    print(f'Target {target} is outside world root {world}', file=sys.stderr)
+    sys.exit(1)
+print('Target path validated.')
+" "<target-path>" "<world-root>"
+```
 
 #### Full scope
 
@@ -596,15 +716,29 @@ Move the original `.walnut` (or `.walnut.age`) file from its current location to
 mkdir -p "<world-root>/01_Archive/03_Inputs"
 
 # Move (not delete -- follows archive convention)
-mv "<package-path>" "<world-root>/01_Archive/03_Inputs/"
+# Use mv -n to avoid clobbering; if collision, append timestamp
+ARCHIVE_DIR="<world-root>/01_Archive/03_Inputs"
+BASENAME="$(basename "<package-path>")"
+if [ -e "$ARCHIVE_DIR/$BASENAME" ]; then
+  TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+  BASENAME="${BASENAME%.*}-${TIMESTAMP}.${BASENAME##*.}"
+fi
+mv "<package-path>" "$ARCHIVE_DIR/$BASENAME"
 ```
 
 If the file was NOT in `03_Inputs/` (e.g. on the Desktop), leave it where it is -- don't move files the human put somewhere intentionally. Only auto-archive from the inbox.
 
-Also move the `.walnut.meta` sidecar if present:
+Also move the `.walnut.meta` sidecar if present (same collision handling):
 
 ```bash
-[ -f "<meta-path>" ] && mv "<meta-path>" "<world-root>/01_Archive/03_Inputs/"
+if [ -f "<meta-path>" ]; then
+  META_BASE="$(basename "<meta-path>")"
+  if [ -e "$ARCHIVE_DIR/$META_BASE" ]; then
+    TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+    META_BASE="${META_BASE%.*}-${TIMESTAMP}.${META_BASE##*.}"
+  fi
+  mv "<meta-path>" "$ARCHIVE_DIR/$META_BASE"
+fi
 ```
 
 Clean up the staging directory:
