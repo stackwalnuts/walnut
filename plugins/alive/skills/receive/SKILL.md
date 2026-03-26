@@ -111,152 +111,126 @@ If `age` is NOT installed, block:
 ╰─
 ```
 
-If `age` IS installed, first validate archive member paths and types before extracting, then decrypt and extract:
+If `age` IS installed, decrypt to a temp file, then validate and extract safely using Python's `tarfile` module (portable across macOS/Linux, handles PAX headers correctly):
 
 ```bash
 STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
-MEMBERS_FILE=$(mktemp "/tmp/walnut-members-XXXXXXXX")
-trap 'rm -rf "$STAGING" "$MEMBERS_FILE"' EXIT
+DECRYPTED=$(mktemp "/tmp/walnut-decrypted-XXXXXXXX")
+trap 'rm -rf "$STAGING" "$DECRYPTED"' EXIT
 
-# Pre-extraction: verbose listing to get member types + paths
-# tar -tvzf shows file type indicators: 'd' for dirs, 'l' for symlinks, '-' for regular
-age -d "<package-path>" | tar -tvzf - > "$MEMBERS_FILE" 2>&1
-if [ ${PIPESTATUS[0]} -ne 0 ] || [ ${PIPESTATUS[1]} -ne 0 ]; then
-  echo "Decryption or archive listing failed"
+# Decrypt to temp file (age -d prompts for passphrase interactively)
+age -d -o "$DECRYPTED" "<package-path>"
+if [ $? -ne 0 ]; then
+  echo "Decryption failed"
   exit 1
 fi
 
-# Validate member paths AND types before extraction
+# Validate archive members AND extract safely via Python tarfile
 python3 -c "
-import sys, re
+import tarfile, sys, os
+
+staging = sys.argv[1]
+archive_path = sys.argv[2]
 violations = []
-for line in open(sys.argv[1]):
-    line = line.strip()
-    if not line:
-        continue
-    # tar -tv output format: permissions owner/group size date time path
-    # First char of permissions indicates type: '-' regular, 'd' dir, 'l' symlink
-    parts = line.split(None, 5)
-    if len(parts) < 6:
-        continue
-    perms = parts[0]
-    member = parts[5].rstrip('/')
-    # Strip 'link -> target' from symlink entries
-    if ' -> ' in member:
-        member = member.split(' -> ')[0].strip()
 
-    # Reject symlinks and special file types (only allow regular files and dirs)
-    type_char = perms[0] if perms else '?'
-    if type_char == 'l':
-        violations.append(f'Symlink rejected: {member}')
-    elif type_char not in ('-', 'd'):
-        violations.append(f'Special file rejected: {member} (type: {type_char})')
+with tarfile.open(archive_path, 'r:gz') as tf:
+    for member in tf.getmembers():
+        name = os.path.normpath(member.name).lstrip('./')
+        # Reject symlinks and hardlinks
+        if member.issym() or member.islnk():
+            violations.append(f'Link rejected: {name}')
+        # Reject special file types (devices, FIFOs, etc.)
+        elif not (member.isreg() or member.isdir()):
+            violations.append(f'Special file rejected: {name} (type={member.type})')
+        # Reject path traversal
+        if '..' in name.split(os.sep):
+            violations.append(f'Path traversal: {name}')
+        if os.path.isabs(name):
+            violations.append(f'Absolute path: {name}')
+        # Verify resolved path stays inside staging
+        target = os.path.normpath(os.path.join(staging, name))
+        if not target.startswith(os.path.realpath(staging) + os.sep) and target != os.path.realpath(staging):
+            violations.append(f'Path escape: {name}')
 
-    # Reject path traversal
-    if '..' in member.split('/'):
-        violations.append(f'Path traversal: {member}')
-    if member.startswith('/'):
-        violations.append(f'Absolute path: {member}')
+    if violations:
+        for v in violations:
+            print(v, file=sys.stderr)
+        sys.exit(1)
 
-if violations:
-    for v in violations:
-        print(v, file=sys.stderr)
-    sys.exit(1)
-print('All archive members validated.')
-" "$MEMBERS_FILE"
+    # All members validated -- extract only regular files and directories
+    safe_members = [m for m in tf.getmembers() if m.isreg() or m.isdir()]
+    tf.extractall(staging, members=safe_members)
+
+print(f'{len(safe_members)} members extracted safely.')
+" "$STAGING" "$DECRYPTED"
 
 if [ $? -ne 0 ]; then
-  echo "Archive contains unsafe entries -- aborting"
+  echo "Validation or extraction failed"
   exit 1
 fi
 
-# Now extract (paths and types already validated)
-age -d "<package-path>" | tar -xzf - -C "$STAGING"
-if [ ${PIPESTATUS[0]} -ne 0 ] || [ ${PIPESTATUS[1]} -ne 0 ]; then
-  echo "Decryption or extraction failed"
-  exit 1
-fi
-
-# Clear trap (staging is now valid, managed by later steps)
-trap - EXIT
-rm -f "$MEMBERS_FILE"
+# Clean up decrypted temp file (staging stays for later steps)
+rm -f "$DECRYPTED"
 ```
 
-`age -d` prompts for the passphrase interactively in the terminal. The squirrel does not handle the passphrase. Note: the passphrase is entered twice (once for listing, once for extraction). This is the security tradeoff for pre-extraction validation.
+`age -d` prompts for the passphrase interactively in the terminal. The squirrel does not handle the passphrase.
 
 **If NOT encrypted:**
 
-First validate archive member paths and types, then extract:
+Validate and extract safely using Python's `tarfile` module:
 
 ```bash
 STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
-MEMBERS_FILE=$(mktemp "/tmp/walnut-members-XXXXXXXX")
-trap 'rm -rf "$STAGING" "$MEMBERS_FILE"' EXIT
-
-# Pre-extraction: verbose listing to get member types + paths
-tar -tvzf "<package-path>" > "$MEMBERS_FILE" 2>&1
-if [ $? -ne 0 ]; then
-  echo "Archive listing failed -- file may be corrupted"
-  exit 1
-fi
+trap 'rm -rf "$STAGING"' EXIT
 
 python3 -c "
-import sys
+import tarfile, sys, os
+
+staging = sys.argv[1]
+archive_path = sys.argv[2]
 violations = []
-for line in open(sys.argv[1]):
-    line = line.strip()
-    if not line:
-        continue
-    parts = line.split(None, 5)
-    if len(parts) < 6:
-        continue
-    perms = parts[0]
-    member = parts[5].rstrip('/')
-    if ' -> ' in member:
-        member = member.split(' -> ')[0].strip()
 
-    type_char = perms[0] if perms else '?'
-    if type_char == 'l':
-        violations.append(f'Symlink rejected: {member}')
-    elif type_char not in ('-', 'd'):
-        violations.append(f'Special file rejected: {member} (type: {type_char})')
+with tarfile.open(archive_path, 'r:gz') as tf:
+    for member in tf.getmembers():
+        name = os.path.normpath(member.name).lstrip('./')
+        if member.issym() or member.islnk():
+            violations.append(f'Link rejected: {name}')
+        elif not (member.isreg() or member.isdir()):
+            violations.append(f'Special file rejected: {name} (type={member.type})')
+        if '..' in name.split(os.sep):
+            violations.append(f'Path traversal: {name}')
+        if os.path.isabs(name):
+            violations.append(f'Absolute path: {name}')
+        target = os.path.normpath(os.path.join(staging, name))
+        if not target.startswith(os.path.realpath(staging) + os.sep) and target != os.path.realpath(staging):
+            violations.append(f'Path escape: {name}')
 
-    if '..' in member.split('/'):
-        violations.append(f'Path traversal: {member}')
-    if member.startswith('/'):
-        violations.append(f'Absolute path: {member}')
+    if violations:
+        for v in violations:
+            print(v, file=sys.stderr)
+        sys.exit(1)
 
-if violations:
-    for v in violations:
-        print(v, file=sys.stderr)
-    sys.exit(1)
-print('All archive members validated.')
-" "$MEMBERS_FILE"
+    safe_members = [m for m in tf.getmembers() if m.isreg() or m.isdir()]
+    tf.extractall(staging, members=safe_members)
+
+print(f'{len(safe_members)} members extracted safely.')
+" "$STAGING" "<package-path>"
 
 if [ $? -ne 0 ]; then
-  echo "Archive contains unsafe entries -- aborting"
+  echo "Validation or extraction failed"
   exit 1
 fi
-
-# Extract (paths and types already validated)
-tar -xzf "<package-path>" -C "$STAGING"
-if [ $? -ne 0 ]; then
-  echo "Extraction failed"
-  exit 1
-fi
-
-# Clear trap (staging is now valid, managed by later steps)
-trap - EXIT
-rm -f "$MEMBERS_FILE"
 ```
+
+Note: The `tarfile` module handles both GNU tar and BSD tar archives, PAX extended headers, and various tar formats portably. By filtering to `safe_members` before extraction, symlinks, hardlinks, and special files are never written to disk.
 
 ---
 
-### Step 3 -- Post-Extraction Safety Validation
+### Step 3 -- Post-Extraction Safety Validation (defense in depth)
 
 **This is a security requirement. Do NOT skip.**
 
-Step 2 already validated archive member paths before extraction. This step validates the extracted filesystem for anything that slipped through or was created by the extraction process:
+Step 2 already validates archive members via Python's `tarfile` and only extracts regular files and directories. This step is defense-in-depth -- it walks the extracted filesystem to catch anything unexpected:
 
 ```bash
 python3 -c "
@@ -384,7 +358,10 @@ with open(manifest_path) as f:
 # This pattern matches the manifest template's exact structure.
 entries = []
 for m in re.finditer(r'- path: \"?([^\"\\n]+)\"?\n\s+sha256: \"?([a-f0-9]{64})\"?\n\s+size: (\d+)', manifest_text):
-    entries.append({'path': m.group(1).strip(), 'sha256': m.group(2), 'size': int(m.group(3))})
+    raw_path = m.group(1).strip()
+    # Normalize: strip leading ./ and collapse redundant separators
+    norm_path = os.path.normpath(raw_path).lstrip('./')
+    entries.append({'path': norm_path, 'sha256': m.group(2), 'size': int(m.group(3))})
 
 errors = []
 verified = 0
@@ -453,7 +430,7 @@ listed_paths = {e['path'] for e in entries}
 for root, dirs, files in os.walk(staging):
     for name in files:
         full = os.path.join(root, name)
-        rel = os.path.relpath(full, staging)
+        rel = os.path.normpath(os.path.relpath(full, staging)).lstrip('./')
         if rel == 'manifest.yaml':
             continue
         if rel not in listed_paths:
@@ -706,10 +683,21 @@ If collision:
 
 2. **Copy capsule directory** from staging to `<target-walnut>/_core/_capsules/<capsule-name>/`
 
+If the human chose "Replace" for a name collision, remove the existing capsule first:
+
+```bash
+# Only for "Replace" -- remove old capsule before copying new one
+rm -rf "<target-walnut>/_core/_capsules/<capsule-name>"
+```
+
+Then copy (same for new capsules and replacements):
+
 ```bash
 mkdir -p "<target-walnut>/_core/_capsules/<capsule-name>"
-rsync -a "$STAGING/_core/_capsules/<capsule-name>/" "<target-walnut>/_core/_capsules/<capsule-name>/"
+rsync -a --no-perms --no-owner --no-group "$STAGING/_core/_capsules/<capsule-name>/" "<target-walnut>/_core/_capsules/<capsule-name>/"
 ```
+
+The `--no-perms --no-owner --no-group` flags prevent preserving foreign permissions or ownership from the package. Files inherit the target directory's defaults.
 
 3. **Add `received_from:` to the capsule companion** -- edit `companion.md` to add provenance:
 
@@ -786,33 +774,34 @@ Imported from .walnut package: <original-filename>
 
 Move the original `.walnut` (or `.walnut.age`) file from its current location to the archive. If the file came from `03_Inputs/`, move it to `01_Archive/03_Inputs/`:
 
-```bash
-# Create archive target if needed
-mkdir -p "<world-root>/01_Archive/03_Inputs"
-
-# Move (not delete -- follows archive convention)
-# If a file with the same name exists, append timestamp to avoid clobbering
-ARCHIVE_DIR="<world-root>/01_Archive/03_Inputs"
-BASENAME="$(basename "<package-path>")"
-if [ -e "$ARCHIVE_DIR/$BASENAME" ]; then
-  TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-  BASENAME="${BASENAME%.*}-${TIMESTAMP}.${BASENAME##*.}"
-fi
-mv "<package-path>" "$ARCHIVE_DIR/$BASENAME"
-```
-
-If the file was NOT in `03_Inputs/` (e.g. on the Desktop), leave it where it is -- don't move files the human put somewhere intentionally. Only auto-archive from the inbox.
-
-Also move the `.walnut.meta` sidecar if present (same collision handling):
+Only auto-archive files that came from `03_Inputs/`. Files from other locations (e.g. Desktop) are left where the human put them.
 
 ```bash
-if [ -f "<meta-path>" ]; then
-  META_BASE="$(basename "<meta-path>")"
-  if [ -e "$ARCHIVE_DIR/$META_BASE" ]; then
+PACKAGE_DIR="$(cd "$(dirname "<package-path>")" && pwd)"
+INPUTS_DIR="$(cd "<world-root>/03_Inputs" 2>/dev/null && pwd)"
+
+# Only archive if the package is inside 03_Inputs/
+if [ "$PACKAGE_DIR" = "$INPUTS_DIR" ]; then
+  ARCHIVE_DIR="<world-root>/01_Archive/03_Inputs"
+  mkdir -p "$ARCHIVE_DIR"
+
+  # If a file with the same name already exists, append timestamp
+  BASENAME="$(basename "<package-path>")"
+  if [ -e "$ARCHIVE_DIR/$BASENAME" ]; then
     TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-    META_BASE="${META_BASE%.*}-${TIMESTAMP}.${META_BASE##*.}"
+    # Preserve full extension (.walnut.age -> -TIMESTAMP.walnut.age)
+    BASENAME="${BASENAME%%.*}-${TIMESTAMP}.${BASENAME#*.}"
   fi
-  mv "<meta-path>" "$ARCHIVE_DIR/$META_BASE"
+  mv "<package-path>" "$ARCHIVE_DIR/$BASENAME"
+
+  # Also archive .walnut.meta sidecar if present
+  if [ -f "<meta-path>" ]; then
+    META_BASE="$(basename "<meta-path>")"
+    if [ -e "$ARCHIVE_DIR/$META_BASE" ]; then
+      META_BASE="${META_BASE%%.*}-${TIMESTAMP}.${META_BASE#*.}"
+    fi
+    mv "<meta-path>" "$ARCHIVE_DIR/$META_BASE"
+  fi
 fi
 ```
 
