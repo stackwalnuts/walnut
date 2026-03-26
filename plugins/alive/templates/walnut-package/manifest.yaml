@@ -2,7 +2,7 @@
 #
 # Every .walnut archive contains this file at the root.
 # All fields marked [required] must be present. Fields marked [optional]
-# may be omitted. The alive:receive skill validates this manifest before
+# may be omitted. The receiver validates this manifest before
 # importing any content.
 #
 # Schema version: 1.0.0
@@ -55,13 +55,10 @@ created: "{{created_iso8601}}"
 # ──────────────────────────────────────────────────────────────────────
 # Encryption flag [required, boolean]
 #
-# true  => the shared package file was encrypted (.walnut.age)
-# false => the shared package file was unencrypted (.walnut)
-#
-# Inside the archive itself this is always false (you can only read it
-# after decrypting). Set to true in the .walnut.meta sidecar.
+# true  => the package was distributed as .walnut.age (age-encrypted)
+# false => the package was distributed as .walnut (unencrypted)
 # ──────────────────────────────────────────────────────────────────────
-encrypted: false
+encrypted: {{encrypted}}
 
 # ──────────────────────────────────────────────────────────────────────
 # Description [required, string]
