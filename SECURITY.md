@@ -1,8 +1,8 @@
 # Security Policy
 
-## What ALIVE Touches
+## What Walnut Touches
 
-ALIVE is a Claude Code plugin that operates on **local files only**. All context lives on your machine in plain markdown with YAML frontmatter. The plugin does not:
+Walnut is a Claude Code plugin that operates on **local files only**. All context lives on your machine in plain markdown with YAML frontmatter. The plugin does not:
 
 - Phone home to any server
 - Send telemetry or analytics
@@ -17,7 +17,7 @@ The plugin ships 12 hooks that enforce security guarantees mechanically — not 
 |------|-----------|
 | **log-guardian** | Signed log entries are immutable. No agent can edit or delete historical entries. |
 | **rules-guardian** | Plugin-managed system files cannot be modified by the agent. Prevents the runtime from rewriting its own rules. |
-| **archive-enforcer** | `rm` and `rmdir` commands are blocked inside the ALIVE world. You archive, you don't destroy. |
+| **archive-enforcer** | `rm` and `rmdir` commands are blocked inside the walnut world. You archive, you don't destroy. |
 | **external-guard** | Any MCP tool that writes, sends, creates, or deletes in external systems (email, GitHub, APIs) requires explicit user confirmation before executing. |
 
 ## Data Handling
@@ -30,14 +30,14 @@ The plugin ships 12 hooks that enforce security guarantees mechanically — not 
 
 If you find a security issue in the plugin — hooks that can be bypassed, rules that can be circumvented, or any behavior that violates the guarantees above — please report it:
 
-- **Email:** hello@alivecomputer.com
-- **GitHub:** Open a [security advisory](https://github.com/alivecomputer/alive-claude/security/advisories/new)
+- **Email:** hello@walnut.world
+- **GitHub:** Open a [security advisory](https://github.com/stackwalnuts/claude-code/security/advisories/new)
 
 We take these seriously. The entire system is built on the premise that structural guardrails are more reliable than agent compliance.
 
 ## Scope
 
-This policy covers the ALIVE plugin (`plugins/alive/`). It does not cover:
+This policy covers the Walnut plugin (`plugins/walnut/`). It does not cover:
 
 - The AI model running the plugin (Claude, GPT, etc.)
 - The Claude Code CLI itself

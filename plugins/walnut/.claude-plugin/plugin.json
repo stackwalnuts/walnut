@@ -1,0 +1,12 @@
+{
+  "name": "walnut",
+  "version": "1.0.0",
+  "description": "Your life in walnuts. A context system that connects to anything — gather, curate, prototype, ship. Any API, any tool, any AI. Share what you build. Earn from what you know.",
+  "author": {
+    "name": "Stack Walnuts",
+    "email": "hello@walnut.world"
+  },
+  "homepage": "https://walnut.world",
+  "repository": "https://github.com/stackwalnuts/walnut",
+  "license": "MIT"
+}

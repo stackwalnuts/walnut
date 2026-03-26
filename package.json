@@ -1,0 +1,27 @@
+{
+  "name": "@lock-in-lab/walnut",
+  "version": "1.0.0",
+  "description": "Structured context for AI agents — Claude Code plugin + MCP server",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": { "walnut": "./dist/index.js" },
+  "scripts": {
+    "build": "tsc && chmod 755 dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "files": ["dist", "plugins", "skills", ".mcp.json", "README.md", "LICENSE"],
+  "keywords": ["walnut", "context", "mcp", "claude-code", "hermes", "memory", "structured-context"],
+  "author": "Lock-in Lab",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/stackwalnuts/walnut.git" },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "gray-matter": "^4.0.3",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

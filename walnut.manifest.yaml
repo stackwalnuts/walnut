@@ -1,9 +1,9 @@
-name: "alive"
+name: "walnut"
 description: "Give any AI agent a memory that compounds. Open source. Plain files. Your machine."
 tags: [plugin, ai, claude-code, context, memory, local-first, markdown, productivity]
 author: "ben"
 category: "plugin"
-url: "https://alivecomputer.com"
-repo: "https://github.com/alivecomputer/context"
-version: "1.0.1-beta"
+url: "https://walnut.world"
+repo: "https://github.com/stackwalnuts/claude-code"
+version: "0.2.0"
 license: "MIT"

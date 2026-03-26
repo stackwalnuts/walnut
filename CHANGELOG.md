@@ -1,13 +1,32 @@
 # Changelog
 
-All notable changes to the ALIVE plugin are documented here.
+All notable changes to the Walnut plugin are documented here.
+
+## [1.0.0] - 2026-03-25
+
+### The Walnut Rebrand
+
+First release as **Walnut**. Everything that was "alive" is now "walnut."
+
+### Changed
+- **Brand:** alive → Walnut. Plugin name: `walnut`. Namespace: `walnut:*`
+- **GitHub:** org `alivecomputer` → `stackwalnuts`. Repo `alive-claude` → `claude-code`
+- **System folder:** `.alive/` → `.walnut/`
+- **All 15 hook scripts:** `alive-*` → `walnut-*`
+- **Marketplace:** name `alivecomputer` → `stackwalnuts`
+- **Install:** `claude plugin install walnut@stackwalnuts`
+
+### Added
+- **Auto-migration:** session-new hook detects `.alive/` and renames to `.walnut/` automatically
+- **`migrate-alive-to-v1` skill** (non-user-invocable) — handles edge cases when both `.alive/` and `.walnut/` exist
+- **Backward compat in all hooks** — `find_world` checks both `.walnut/` and `.alive/` config paths
 
 ## [1.0.1-beta] — 2026-03-12
 
 ### Added
 - **Capsule architecture** — self-contained units of work replace `_working/` and `_references/`. Capsules have companions, versioned drafts, and raw source material. Full lifecycle: `draft → prototype → published → done`. Graduation to walnut root on v1 ship.
-- **3 new skills:** `alive:mine` (deep context extraction), `alive:extend` (create custom skills/rules/hooks), `alive:map` (interactive world graph)
-- **Inbox scan mode** — `alive:capture` with no content falls back to scanning `03_Inputs/` for unrouted files
+- **3 new skills:** `walnut:mine` (deep context extraction), `walnut:extend` (create custom skills/rules/hooks), `walnut:map` (interactive world graph)
+- **Inbox scan mode** — `walnut:capture` with no content falls back to scanning `03_Inputs/` for unrouted files
 - **Context graph** — D3.js force-directed visualization of your entire world
 - **World index generator** — `_index.yaml` built from all walnut and capsule frontmatter
 - **Capsule routing heuristic** — automatic routing of content to capsules by goal alignment
@@ -31,7 +50,7 @@ All notable changes to the ALIVE plugin are documented here.
 - **6 foundational rules:** capsules, human, squirrels, standards, voice, world
 - **12 hooks:** session lifecycle, log guardian, rules guardian, archive enforcer, external guard, root guardian, context watch, inbox check, pre-compact, post-write
 - **Squirrel caretaker runtime** — stash mechanic, session signing, zero-context handoff
-- **ALIVE framework** — 5-domain folder structure (Archive, Life, Inputs, Ventures, Experiments)
+- **Walnut framework** — 5-domain folder structure (Archive, Life, Inputs, Ventures, Experiments)
 - **Walnut system** — 5 core files (key.md, now.md, log.md, insights.md, tasks.md)
 - **Onboarding** — first-run world builder experience
 - **Statusline** — terminal status bar with session info, context warnings, and stash count

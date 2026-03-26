@@ -1,16 +1,16 @@
 {
-  "name": "alivecomputer",
-  "owner": {
-    "name": "Alive Computer",
-    "email": "hello@alivecomputer.com"
+  "name": "walnut",
+  "owner": "stackwalnuts",
+  "metadata": {
+    "description": "Your life in walnuts. A personal context system — structured units of knowledge and work on your machine, connected to everything. Gather from any source. Curate with any AI. Prototype and ship through capsules. Share on walnut.world. Earn from what you build.",
+    "version": "1.0.0"
   },
   "plugins": [
     {
-      "name": "alive",
-      "source": "./plugins/alive",
-      "description": "Personal private context infrastructure. Structured files, a caretaker runtime, and 12 skills that turn your machine into an alive computer.",
-      "version": "1.0.1-beta",
-      "category": "productivity"
+      "name": "walnut",
+      "source": "./plugins/walnut",
+      "description": "Your life in walnuts. A personal context system — structured units of knowledge and work on your machine, connected to everything. Gather from any source. Curate with any AI. Prototype and ship through capsules. Share on walnut.world. Earn from what you build.",
+      "version": "1.0.0"
     }
   ]
 }

@@ -1,22 +1,22 @@
 <p align="center">
-  <img src="alivecomputer-logo.png" alt="Alive Computer" width="600">
+  <img src="alivecomputer-logo.png" alt="Stack Walnuts" width="600">
 </p>
 
-[![Version](https://img.shields.io/badge/version-1.0.1--beta-copper)](https://github.com/alivecomputer/alive-claude/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-copper)](https://github.com/stackwalnuts/claude-code/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-blueviolet)](https://docs.anthropic.com/en/docs/claude-code)
 
-# ALIVE — Context Plugin for Claude Code
+# Walnut — Context Plugin for Claude Code
 
 **Your AI forgets you every session. This fixes that.**
 
-ALIVE gives Claude Code structured, persistent memory. Your projects, people, decisions, and history live in plain files on your machine — and every session compounds on the last.
+Walnut gives Claude Code structured, persistent memory. Your projects, people, decisions, and history live in plain files on your machine — and every session compounds on the last.
 
 ```bash
-claude plugin install alive@alivecomputer
+claude plugin install walnut@stackwalnuts
 ```
 
-Then type `/alive:world`.
+Then type `/walnut:world`.
 
 <!-- TODO: demo visual goes here -->
 
@@ -30,7 +30,7 @@ Then type `/alive:world`.
 
 **Plain files. Your machine.** Markdown in folders. Open in any editor. No cloud. No subscription. No one decides what happens to your context but you.
 
-**Works beyond Claude Code.** ALIVE is the context layer, not the agent. [OpenClaw can traverse it](https://github.com/alivecomputer/alive-openclaw). Codex can read it. Any harness, any model — the files are the API.
+**Works beyond Claude Code.** Walnut is the context layer, not the agent. Any harness, any model — the files are the API.
 
 **Nothing phones home.** No telemetry. No middleman. 12 hooks enforce the guardrails — all local, all yours to inspect.
 
@@ -42,18 +42,18 @@ Then type `/alive:world`.
 
 | Command | What it does |
 |---------|-------------|
-| `/alive:world` | See everything — dashboard, health, route to action |
-| `/alive:load` | Load a walnut — people, capsules, context in tiers |
-| `/alive:save` | Checkpoint — route stash, update state, keep working |
-| `/alive:capture` | Bring external content in — store, route, extract |
-| `/alive:find` | Search across all walnuts — decisions, people, files |
-| `/alive:create` | Scaffold a new walnut with full structure |
-| `/alive:tidy` | System maintenance — stale drafts, orphan files, unsigned sessions |
-| `/alive:tune` | Customize voice, rhythm, and preferences |
-| `/alive:history` | Session timeline — what happened, when, why |
-| `/alive:mine` | Deep extraction from source material |
-| `/alive:extend` | Create custom skills, rules, and hooks |
-| `/alive:map` | Interactive force-directed graph of your world |
+| `/walnut:world` | See everything — dashboard, health, route to action |
+| `/walnut:load` | Load a walnut — people, capsules, context in tiers |
+| `/walnut:save` | Checkpoint — route stash, update state, keep working |
+| `/walnut:capture` | Bring external content in — store, route, extract |
+| `/walnut:find` | Search across all walnuts — decisions, people, files |
+| `/walnut:create` | Scaffold a new walnut with full structure |
+| `/walnut:tidy` | System maintenance — stale drafts, orphan files, unsigned sessions |
+| `/walnut:tune` | Customize voice, rhythm, and preferences |
+| `/walnut:history` | Session timeline — what happened, when, why |
+| `/walnut:mine` | Deep extraction from source material |
+| `/walnut:extend` | Create custom skills, rules, and hooks |
+| `/walnut:map` | Interactive force-directed graph of your world |
 
 ---
 
@@ -82,7 +82,7 @@ my-project/
   docs/                 live context — your actual work
 ```
 
-### The ALIVE domains
+### The walnut domains
 
 Five folders. The letters are the framework.
 
@@ -128,7 +128,7 @@ When a capsule ships v1, it graduates from the workshop (`_core/_capsules/`) to 
 
 ### Runtime injection
 
-ALIVE doesn't fine-tune a model or depend on a specific AI provider. It injects a **caretaker runtime** — a portable set of rules, skills, and hooks — into whatever agent starts a session.
+Walnut doesn't fine-tune a model or depend on a specific AI provider. It injects a **caretaker runtime** — a portable set of rules, skills, and hooks — into whatever agent starts a session.
 
 ```
 Session starts
@@ -187,7 +187,7 @@ No briefing doc. No onboarding call. The files ARE the context. Read them in ord
 | session-compact | Context compaction | Stash preserved across memory compression |
 | log-guardian | Edit/Write to log.md | Signed entries are immutable |
 | rules-guardian | Edit/Write to plugin files | System files can't be accidentally modified |
-| root-guardian | Edit/Write to world root | Non-ALIVE files blocked, routed to walnut |
+| root-guardian | Edit/Write to world root | Non-walnut files blocked, routed to walnut |
 | archive-enforcer | Bash rm/rmdir | Nothing gets deleted — only archived |
 | external-guard | Any MCP write tool | External actions require explicit confirmation |
 | pre-compact | Before compaction | Timestamp recorded for session continuity |
@@ -199,7 +199,7 @@ No briefing doc. No onboarding call. The files ARE the context. Read them in ord
 
 ## Background
 
-ALIVE was built in a lab — hundreds of hours of agent sessions across real ventures, testing context persistence, agent handoff, and the limits of what AI can reliably manage unsupervised.
+Walnut was built in a lab — hundreds of hours of agent sessions across real ventures, testing context persistence, agent handoff, and the limits of what AI can reliably manage unsupervised.
 
 ### What we learned about safety
 
@@ -236,11 +236,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Community
 
-- [GitHub Discussions](https://github.com/alivecomputer/alive-claude/discussions) — bugs, features, ideas
+- [GitHub Discussions](https://github.com/stackwalnuts/claude-code/discussions) — bugs, features, ideas
 
 ---
 
-If ALIVE makes your AI smarter, [star the repo](https://github.com/alivecomputer/alive-claude) — it helps others find it.
+If Walnut makes your AI smarter, [star the repo](https://github.com/stackwalnuts/claude-code) — it helps others find it.
 
 ## License
 
