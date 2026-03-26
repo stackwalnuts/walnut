@@ -1,5 +1,5 @@
 ---
-description: "Package walnut context into a portable .walnut file for sharing via any channel -- email, AirDrop, Slack, USB. Supports three scopes (full, capsule, snapshot), sensitivity gating, and optional age encryption."
+description: "Package walnut context into a portable .walnut file for sharing via any channel -- email, AirDrop, Slack, USB. Supports three scopes (full, capsule, snapshot), sensitivity gating, and optional passphrase encryption."
 user-invocable: true
 ---
 
@@ -7,7 +7,9 @@ user-invocable: true
 
 Package walnut context for someone else. The export side of P2P sharing.
 
-A `.walnut` file is a gzip-compressed tar archive with a manifest. Three scopes: full walnut handoff, capsule-level sharing, or a lightweight snapshot for status updates. Optional passphrase encryption via `age`.
+A `.walnut` file is a gzip-compressed tar archive with a manifest. Three scopes: full walnut handoff, capsule-level sharing, or a lightweight snapshot for status updates. Optional passphrase encryption via `openssl` -- fully session-driven, no terminal interaction required.
+
+**Single file output:** A `.walnut` file is always one file. For encrypted packages, the manifest stays cleartext inside the archive (so the recipient can preview source/scope/note before decrypting) and the actual content is an encrypted blob (`payload.enc`) alongside it.
 
 The skill runs in the current walnut by default. If a walnut name is provided as an argument, operate on that walnut instead -- read its `_core/` before proceeding.
 
@@ -15,14 +17,14 @@ The skill runs in the current walnut by default. If a walnut name is provided as
 
 ## Prerequisites
 
-Read the format spec before generating any package. The template lives relative to the plugin install path:
+Read the format spec before generating any package. The templates are at these **exact paths** relative to the plugin install root:
 
 ```
 templates/walnut-package/format-spec.md    -- full format specification
 templates/walnut-package/manifest.yaml     -- manifest template with field docs
 ```
 
-The squirrel MUST read both files before packaging. Do not reconstruct the manifest schema from memory.
+The squirrel MUST read both files before packaging. Do not reconstruct the manifest schema from memory. Do NOT spawn an Explore agent or search for these files -- the paths above are authoritative.
 
 ---
 
@@ -126,6 +128,17 @@ Build the file list for the selected scope. Show what will be packaged:
 
 If the human picks "Add a personal note", ask for the note. It goes into the manifest's `note:` field and is shown in a bordered block on import.
 
+**Recipient (for shared: metadata):** After confirming scope, ask who the package is for:
+
+```
+╭─ 🐿️ recipient
+│
+│  ▸ Who is this for? (name or skip)
+╰─
+```
+
+If the human provides a name, store it for the `shared:` metadata `to:` field in Step 8. If they skip, infer from the personal note if possible, otherwise use `"walnut-package"`.
+
 **Cross-capsule path warning:** Scan capsule companion `sources:` entries for paths containing `../`. If found:
 
 ```
@@ -146,18 +159,12 @@ This is informational only -- do not block.
 
 ### Step 5 -- Encryption Prompt
 
-Check whether `age` is available:
-
-```bash
-command -v age >/dev/null 2>&1
-```
-
-**If age is available:**
+Encryption uses `openssl enc` which is pre-installed on macOS and Linux. No additional dependencies needed. The passphrase is collected through the session and passed via environment variable -- it never touches disk and is never visible in process listings.
 
 ```
 ╭─ 🐿️ encryption
 │
-│  age is available. Encrypt this package?
+│  Encrypt this package?
 │  (Recipient will need the passphrase to open it.)
 │
 │  ▸ Encrypt?
@@ -180,23 +187,16 @@ If content was flagged `restricted` or `pii: true` in Step 3, surface that conte
 ╰─
 ```
 
-If the human chooses to encrypt, `age -p` prompts for a passphrase interactively via the Bash tool. The squirrel does not handle the passphrase -- `age` manages it directly.
-
-**If age is NOT available:**
+If the human chooses to encrypt, collect the passphrase immediately:
 
 ```
-╭─ 🐿️ encryption unavailable
+╭─ 🐿️ passphrase
 │
-│  age is not installed. Package will be unencrypted.
-│  Install: brew install age (macOS) or apt install age (Linux)
-│
-│  ▸ Continue without encryption?
-│  1. Yes
-│  2. Cancel (install age first)
+│  ▸ Enter a passphrase for this package:
 ╰─
 ```
 
-If content is `restricted` or `pii: true` and age is unavailable, add a stronger warning that the content will be sent in cleartext.
+Store the passphrase in memory for Step 6e. It is passed to `openssl` via `env:` -- never written to a file or passed as a CLI argument.
 
 ---
 
@@ -315,13 +315,13 @@ Write the completed `manifest.yaml` to `$STAGING/manifest.yaml`.
 
 #### 6e. Create the archive
 
-Build the output path. The **base** is the filename without any `.walnut` extension:
+Build the output path. The **base** is the filename without the `.walnut` extension:
 
 ```
 OUTPUT_BASE=~/Desktop/<walnut-name>-<scope>-<YYYY-MM-DD>
 ```
 
-The final filename is `$OUTPUT_BASE.walnut` (unencrypted) or `$OUTPUT_BASE.walnut.age` (encrypted). If encrypting, show the encrypted default in the prompt.
+The final filename is always `$OUTPUT_BASE.walnut` -- encrypted or not. One file.
 
 Ask the human for the output path:
 
@@ -338,41 +338,59 @@ Ask the human for the output path:
 If a file with that name already exists, append a sequence number to the base: `$OUTPUT_BASE-2`, `$OUTPUT_BASE-3`, etc.
 
 **Unencrypted:**
+
+All content + manifest.yaml are already in `$STAGING`. Create the archive directly:
+
 ```bash
 COPYFILE_DISABLE=1 tar -czf "$OUTPUT_BASE.walnut" -C "$STAGING" .
 ```
 
 **Encrypted:**
+
+For encrypted packages, the `.walnut` file contains `manifest.yaml` (cleartext, for preview) alongside `payload.enc` (the encrypted content). This keeps it as a single file while letting the recipient peek at metadata before decrypting.
+
 ```bash
-COPYFILE_DISABLE=1 tar -czf - -C "$STAGING" . | age -p > "$OUTPUT_BASE.walnut.age"
+# 1. Create an inner tar.gz of the content (everything except manifest.yaml)
+INNER=$(mktemp /tmp/walnut-inner-XXXXX.tar.gz)
+COPYFILE_DISABLE=1 tar -czf "$INNER" -C "$STAGING" --exclude='manifest.yaml' .
+
+# 2. Encrypt the inner tar with the passphrase collected in Step 5
+WALNUT_PASSPHRASE="<passphrase-from-step-5>" \
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 600000 \
+  -in "$INNER" -out "$STAGING/payload.enc" \
+  -pass env:WALNUT_PASSPHRASE
+
+# 3. Remove the inner tar (no longer needed)
+rm -f "$INNER"
+
+# 4. Remove content files from staging -- only manifest.yaml and payload.enc remain
+find "$STAGING" -mindepth 1 -not -name 'manifest.yaml' -not -name 'payload.enc' -delete 2>/dev/null
+# Handle directories left behind
+find "$STAGING" -mindepth 1 -type d -empty -delete 2>/dev/null
+
+# 5. Create the outer archive (manifest.yaml + payload.enc)
+COPYFILE_DISABLE=1 tar -czf "$OUTPUT_BASE.walnut" -C "$STAGING" .
 ```
 
-Note: `age -p` will prompt for a passphrase interactively in the terminal.
+**IMPORTANT:** The passphrase MUST be passed via `env:` (environment variable), never as a CLI argument (visible in `ps`) or written to a file. The `WALNUT_PASSPHRASE=... openssl ...` syntax sets it for that single command only.
 
-#### 6f. Generate .walnut.meta sidecar (encrypted packages only)
+#### 6f. Strip macOS extended attributes
 
-If the package was encrypted, write a cleartext `.walnut.meta` file alongside the `.walnut.age` file. The meta path is always `$OUTPUT_BASE.walnut.meta` (sits next to `$OUTPUT_BASE.walnut.age`):
+macOS may add quarantine/provenance attributes to created files. Strip them:
 
-```yaml
-# Cleartext preview. Not required for import.
-source:
-  walnut: <walnut-name>
-  scope: <scope>
-  capsules: [<capsule-names>]     # capsule scope only
-created: <ISO 8601 timestamp>
-encrypted: true
-description: "<description>"
-note: "<note>"                    # if provided
-file_count: <number of files>
+```bash
+xattr -c "$OUTPUT_BASE.walnut" 2>/dev/null || true
 ```
-
-Write this to `$OUTPUT_BASE.walnut.meta`.
 
 #### 6g. Clean up staging
 
+The staging directory is in `/tmp` and will be cleaned by the OS, but clean it explicitly:
+
 ```bash
-rm -rf "$STAGING"
+rm -rf "$STAGING" 2>/dev/null || true
 ```
+
+Note: The archive enforcer hook may block `rm` if it pattern-matches too broadly. If blocked, ignore -- `/tmp` is cleaned by the OS automatically.
 
 ---
 
@@ -393,13 +411,12 @@ Show the result:
 ╰─
 ```
 
-If encrypted, show both the package and the meta sidecar:
+If encrypted:
 
 ```
 ╭─ 🐿️ packaged
 │
-│  Package:  ~/Desktop/nova-station-capsule-2026-03-26.walnut.age
-│  Preview:  ~/Desktop/nova-station-capsule-2026-03-26.walnut.meta
+│  File: ~/Desktop/nova-station-capsule-2026-03-26.walnut
 │  Size: 2.4 MB (encrypted)
 │  Scope: capsule (shielding-review, safety-brief)
 │
@@ -407,6 +424,8 @@ If encrypted, show both the package and the meta sidecar:
 │  Recipient imports with /alive:receive.
 ╰─
 ```
+
+Always one file. The recipient opens it with `/alive:receive` regardless of encryption -- the receive skill detects `payload.enc` inside and prompts for the passphrase.
 
 ---
 

@@ -41,34 +41,58 @@ Always extract to a temporary staging directory first. Never extract directly in
 
 | Extension | Meaning |
 |-----------|---------|
-| `.walnut` | Unencrypted package (tar.gz) |
-| `.walnut.age` | Encrypted package (age-encrypted tar.gz stream) |
+| `.walnut` | Package (tar.gz) -- encrypted or unencrypted |
 
-These are the two primary package extensions. An optional `.walnut.meta` sidecar may accompany encrypted packages (see Section 7).
+Always one file, always `.walnut`. Encryption is detected by the presence of `payload.enc` inside the archive (see Section 3).
 
 ---
 
 ## 3. Encryption
 
-Encryption uses [age](https://github.com/FiloSottile/age). The v1 implementation uses passphrase mode (`age -p`); recipient-based encryption (`age -r`) is equally valid and MAY be supported in future versions.
+Encryption uses `openssl enc` with AES-256-CBC, PBKDF2 key derivation (600,000 iterations), and random salt. This is pre-installed on macOS and Linux -- no additional dependencies. The passphrase is collected through the session and passed via environment variable (never on disk, never visible in `ps`).
 
-**Encryption pipeline (passphrase mode):**
+**Encrypted package structure:**
 
-```bash
-COPYFILE_DISABLE=1 tar -czf - -C <staging-dir> . | age -p > <output>.walnut.age
+An encrypted `.walnut` file is still a tar.gz, but instead of containing content files directly, it contains:
+
+```
+manifest.yaml      <- cleartext (preview without decrypting)
+payload.enc        <- openssl-encrypted inner tar.gz of the actual content
 ```
 
-**Decryption pipeline:**
+The manifest is always readable. The content requires the passphrase.
+
+**Encryption (share side):**
 
 ```bash
-age -d <package>.walnut.age | tar -xzf - -C <staging-dir>
+# 1. Create inner tar.gz of content
+COPYFILE_DISABLE=1 tar -czf /tmp/inner.tar.gz -C <staging-dir> --exclude='manifest.yaml' .
+
+# 2. Encrypt with passphrase via env var
+WALNUT_PASSPHRASE="<passphrase>" openssl enc -aes-256-cbc -salt -pbkdf2 -iter 600000 \
+  -in /tmp/inner.tar.gz -out <staging-dir>/payload.enc -pass env:WALNUT_PASSPHRASE
+
+# 3. Create outer tar.gz (manifest.yaml + payload.enc)
+COPYFILE_DISABLE=1 tar -czf <output>.walnut -C <staging-dir> manifest.yaml payload.enc
 ```
 
-Note: `-f -` is explicit for GNU tar compatibility. BSD tar (macOS) treats stdin/stdout as default when `-f` is omitted, but GNU tar does not.
+**Decryption (receive side):**
 
-**Detection:** An age-encrypted file starts with the ASCII header `age-encryption.org/v1`. The receiver checks the first bytes of the file to auto-detect encryption before attempting extraction.
+```bash
+# 1. Extract outer tar.gz (gets manifest.yaml + payload.enc)
+tar -xzf <package>.walnut -C <staging-dir>
 
-If `age` is not installed and encryption was requested, the share skill MUST abort (not silently downgrade to unencrypted). It provides install instructions (`brew install age`) and offers to proceed without encryption only with explicit user confirmation. The receive skill blocks on encrypted packages when age is unavailable and provides the same install instructions.
+# 2. Decrypt payload
+WALNUT_PASSPHRASE="<passphrase>" openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+  -in <staging-dir>/payload.enc -out /tmp/inner.tar.gz -pass env:WALNUT_PASSPHRASE
+
+# 3. Extract inner content
+tar -xzf /tmp/inner.tar.gz -C <staging-dir>
+```
+
+**Detection:** After extracting the outer archive, check for `payload.enc`. If present, the package is encrypted. If absent, content files are directly available.
+
+**Passphrase handling:** MUST be passed via `env:WALNUT_PASSPHRASE` (set for one command only). Never as a CLI argument. Never written to disk.
 
 ---
 
@@ -77,7 +101,7 @@ If `age` is not installed and encryption was requested, the share skill MUST abo
 **Package filename pattern:**
 
 ```
-<walnut-name>-<scope>-<YYYY-MM-DD>[-<n>].walnut[.age]
+<walnut-name>-<scope>-<YYYY-MM-DD>[-<n>].walnut
 ```
 
 `<walnut-name>` uses the walnut's filesystem directory name, which is always lowercase kebab-case (`[a-z0-9-]+`). This matches the existing walnut naming convention.
@@ -89,7 +113,6 @@ Examples:
 | Full | `nova-station-full-2026-03-26.walnut` |
 | Capsule | `nova-station-capsule-2026-03-26.walnut` |
 | Snapshot | `nova-station-snapshot-2026-03-26.walnut` |
-| Encrypted | `nova-station-capsule-2026-03-26.walnut.age` |
 
 If multiple packages of the same scope are created on the same day, append a sequence number: `nova-station-capsule-2026-03-26-2.walnut`.
 
@@ -197,7 +220,7 @@ Every package contains a `manifest.yaml` at the archive root. See the companion 
 | `source` | object | Provenance: walnut name, session_id, engine, plugin_version. |
 | `scope` | enum | `full`, `capsule`, or `snapshot`. |
 | `created` | string (ISO 8601) | When the package was created. |
-| `encrypted` | boolean | `true` if the package was distributed as `.walnut.age` (age-encrypted), `false` otherwise. |
+| `encrypted` | boolean | `true` if the package contains `payload.enc` (openssl-encrypted content), `false` if content is directly accessible. |
 | `description` | string | One-line human-readable description. Auto-generated from `key.md` goal (or capsule goal for capsule scope). |
 | `files` | array | Every file in the archive with `path`, `sha256`, and `size`. |
 
@@ -212,28 +235,11 @@ Every package contains a `manifest.yaml` at the archive root. See the companion 
 
 ---
 
-## 7. The .walnut.meta Sidecar (OPTIONAL)
+## 7. Encrypted Package Preview
 
-A `.walnut.meta` file MAY be placed alongside a `.walnut.age` file to provide a cleartext preview without decrypting. This is an optional convenience -- it is never required for import and receivers MUST NOT depend on its presence.
+For encrypted packages, `manifest.yaml` is always cleartext inside the outer archive. This lets the receiver preview the source, scope, note, and description before entering a passphrase. The `files:` array in the manifest lists the content files inside `payload.enc` -- their checksums are validated after decryption, not before.
 
-```yaml
-# Optional cleartext preview. Not required for import.
-source:
-  walnut: nova-station
-  scope: capsule
-  capsules: [shielding-review, safety-brief]
-created: 2026-03-26T12:00:00Z
-encrypted: true
-description: "Evaluate radiation shielding vendors for habitat module"
-note: "Two capsules from the shielding review -- one still in draft."
-file_count: 8
-```
-
-Rules:
-- MUST NOT be inside the archive -- sits alongside the `.walnut.age` file on the filesystem.
-- MUST NOT be required for import -- the receiver works without it.
-- MAY be auto-generated by the share skill when encryption is used.
-- Contains a subset of manifest fields. No checksums, no full file list.
+No sidecar files. No separate metadata. One `.walnut` file contains everything.
 
 ---
 

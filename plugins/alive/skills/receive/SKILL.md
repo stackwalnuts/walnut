@@ -7,7 +7,9 @@ user-invocable: true
 
 Import walnut context from someone else. The import side of P2P sharing.
 
-A `.walnut` file is a gzip-compressed tar archive with a manifest. Three scopes: full walnut handoff (creates new walnut), capsule-level import (into existing walnut), or a snapshot for read-only viewing. Handles encryption detection and integrity validation before writing anything.
+A `.walnut` file is always a single gzip-compressed tar archive. Three scopes: full walnut handoff (creates new walnut), capsule-level import (into existing walnut), or a snapshot for read-only viewing. Handles encryption detection and integrity validation before writing anything.
+
+**Encrypted packages** contain `manifest.yaml` (cleartext, for preview) alongside `payload.enc` (the encrypted content). Decryption uses `openssl` -- fully session-driven, no terminal interaction. **Unencrypted packages** contain `manifest.yaml` alongside the content files directly.
 
 ---
 
@@ -20,7 +22,7 @@ templates/walnut-package/format-spec.md    -- full format specification
 templates/walnut-package/manifest.yaml     -- manifest template with field docs
 ```
 
-The squirrel MUST read both files before importing. Do not reconstruct the manifest schema from memory.
+The squirrel MUST read both files before importing. Do not reconstruct the manifest schema from memory. Do NOT spawn an Explore agent or search for these files -- the paths above are authoritative.
 
 **World root discovery:** The world root is the ALIVE folder containing `01_Archive/`, `02_Life/`, `03_Inputs/`, `04_Ventures/`, `05_Experiments/`. Discover it by walking up from the current walnut's path or by reading the `.alive/` directory location. All target paths for import MUST resolve inside this root.
 
@@ -52,263 +54,117 @@ If no path argument, ask:
 
 ### 2. Inbox scan delegation
 
-The capture skill's inbox scan detects a `.walnut` or `.walnut.age` file in `03_Inputs/` and delegates here. When delegated, the file path is already known -- skip the path prompt and proceed to Step 1.
+The capture skill's inbox scan detects a `.walnut` file in `03_Inputs/` and delegates here. When delegated, the file path is already known -- skip the path prompt and proceed to Step 1.
 
 ---
 
 ## Flow
 
-### Step 1 -- Meta Preview (encrypted packages only)
+### Step 1 -- Extract Outer Archive and Read Manifest
 
-If a `.walnut.meta` sidecar exists alongside a `.walnut.age` file, read it and show a preview before prompting for decryption:
+Every `.walnut` file is a tar.gz. Extract it to a staging directory first:
+
+```bash
+STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
+```
+
+Extract the outer archive safely using the Python tarfile validation (same security validation used throughout -- see the full validation script in the reference section at the end of this file):
+
+```bash
+python3 -c '<SAFE_EXTRACT_SCRIPT>' "$STAGING" "<package-path>"
+```
+
+**Agent state note:** Shell variables do not persist between separate Bash tool calls. The squirrel MUST store the staging directory path in its own conversation state (note it after creation) and explicitly clean up staging in every abort path and at the end of Step 8.
+
+After extraction, read `$STAGING/manifest.yaml`. This is always cleartext, even in encrypted packages. Show a preview:
 
 ```
-╭─ 🐿️ package preview (from .walnut.meta)
+╭─ 🐿️ package preview
 │
 │  Source:   nova-station
 │  Scope:    capsule (shielding-review, safety-brief)
 │  Created:  2026-03-26
 │  Files:    8
-│  Encrypted: yes
+│  Encrypted: no
 │
 │  Note: "Two capsules from the shielding review -- one still in draft."
 │
-│  ▸ Decrypt and import?
+│  ▸ Import?
 │  1. Yes
 │  2. Cancel
 ╰─
 ```
 
-If no `.walnut.meta` exists, skip this preview -- detect encryption in Step 2.
-
 ---
 
-### Step 2 -- Encryption Detection
+### Step 2 -- Encryption Detection and Decryption
 
-Check the first bytes of the package file for the age header:
-
-```bash
-head -c 30 "<package-path>" | grep -q "age-encryption.org/v1"
-```
-
-**If encrypted:**
-
-Check that `age` is installed:
+Check if the extracted staging directory contains `payload.enc`. If yes, the content is encrypted.
 
 ```bash
-command -v age >/dev/null 2>&1
+test -f "$STAGING/payload.enc" && echo "ENCRYPTED" || echo "CLEARTEXT"
 ```
 
-If `age` is NOT installed, block:
+**If CLEARTEXT:** The content files are already extracted alongside the manifest. Proceed to Step 3.
+
+**If ENCRYPTED:**
+
+Collect the passphrase through the session:
 
 ```
-╭─ 🐿️ encryption
+╭─ 🐿️ encrypted package
 │
-│  This package is encrypted but age is not installed.
-│  Install: brew install age (macOS) or apt install age (Linux)
+│  This package is encrypted.
 │
-│  Cannot proceed without age.
+│  ▸ Enter the passphrase:
 ╰─
 ```
 
-If `age` IS installed, decrypt to a temp file, then validate and extract safely using Python's `tarfile` module (portable across macOS/Linux, handles PAX headers correctly):
+Decrypt `payload.enc` to a temporary inner archive, then extract it into the staging directory:
 
 ```bash
-STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
-DECRYPTED=$(mktemp "/tmp/walnut-decrypted-XXXXXXXX")
-trap 'rm -rf "$STAGING" "$DECRYPTED"' EXIT
-
-# Decrypt to temp file (age -d prompts for passphrase interactively)
-age -d -o "$DECRYPTED" "<package-path>"
-if [ $? -ne 0 ]; then
-  echo "Decryption failed"
-  exit 1
-fi
-
-# Validate archive members AND extract safely via Python tarfile
-python3 -c '
-import tarfile, sys, os, unicodedata
-
-MAX_MEMBERS = 10000
-MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
-MAX_PATH_LEN = 512
-# tarfile type codes for PAX/GNU metadata (allow but skip extraction)
-TAR_METADATA_TYPES = {tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK}
-
-staging = sys.argv[1]
-archive_path = sys.argv[2]
-staging_real = os.path.realpath(staging)
-violations = []
-seen_names = set()
-total_bytes = 0
-count = 0
-safe_members = []
-
-with tarfile.open(archive_path, "r:gz") as tf:
-    for member in tf:
-        count += 1
-        if count > MAX_MEMBERS:
-            violations.append(f"Too many members (>{MAX_MEMBERS})")
-            break
-
-        raw = member.name
-        # Cap raw name length early to prevent DoS from huge PAX-provided paths
-        if len(raw) > 16384:
-            violations.append(f"Raw name too long: {len(raw)} chars")
-            continue
-        # Check raw name for traversal BEFORE normalization (normpath erases internal ..)
-        if ".." in raw.split("/"):
-            violations.append(f"Path traversal in raw name: {raw}")
-            continue
-        # Reject control characters in paths (ASCII C0, DEL, C1)
-        if any(ord(c) < 0x20 or 0x7f <= ord(c) <= 0x9f for c in raw):
-            violations.append(f"Control characters in path: {repr(raw)}")
-            continue
-
-        # Normalize for display/comparison
-        name = os.path.normpath(raw)
-        while name.startswith("./"):
-            name = name[2:]
-
-        # Allow tar metadata entries (PAX, GNU longname) but skip extraction
-        if member.type in TAR_METADATA_TYPES:
-            continue
-        # Reject entries that normalize to staging root itself
-        if name in ("", ".", "./"):
-            continue
-        # Reject symlinks and hardlinks
-        if member.issym() or member.islnk():
-            violations.append(f"Link rejected: {name}")
-            continue
-        # Reject special file types (devices, FIFOs, etc.)
-        if not (member.isreg() or member.isdir()):
-            violations.append(f"Special file rejected: {name} (type={member.type})")
-            continue
-
-        if len(name) > MAX_PATH_LEN:
-            violations.append(f"Path too long: {name[:80]}... ({len(name)} chars)")
-            continue
-        if os.path.isabs(name):
-            violations.append(f"Absolute path: {name}")
-        resolved = os.path.normpath(os.path.join(staging_real, name))
-        if not resolved.startswith(staging_real + os.sep) and resolved != staging_real:
-            violations.append(f"Path escape: {name}")
-        # Case-insensitive + Unicode-normalized duplicate detection (macOS APFS/HFS+)
-        canon = unicodedata.normalize("NFC", name).casefold()
-        if canon in seen_names:
-            violations.append(f"Duplicate path (case/unicode-insensitive): {name}")
-        seen_names.add(canon)
-        if member.isreg():
-            total_bytes += member.size
-            if total_bytes > MAX_TOTAL_BYTES:
-                violations.append(f"Total size exceeds {MAX_TOTAL_BYTES} byte cap")
-                break
-        safe_members.append(member)
-
-    if violations:
-        for v in violations:
-            print(v, file=sys.stderr)
-        sys.exit(1)
-    tf.extractall(staging, members=safe_members)
-print(f"{len(safe_members)} members extracted safely.")
-' "$STAGING" "$DECRYPTED"
+# Decrypt the payload
+INNER_TAR=$(mktemp "/tmp/walnut-inner-XXXXXXXX.tar.gz")
+WALNUT_PASSPHRASE="<passphrase-from-session>" \
+  openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+  -in "$STAGING/payload.enc" \
+  -out "$INNER_TAR" \
+  -pass env:WALNUT_PASSPHRASE
 
 if [ $? -ne 0 ]; then
-  echo "Validation or extraction failed"
-  exit 1
-fi
-
-# Clean up decrypted temp file (staging stays for later steps)
-rm -f "$DECRYPTED"
-```
-
-`age -d` prompts for the passphrase interactively in the terminal. The squirrel does not handle the passphrase.
-
-**If NOT encrypted:**
-
-Validate and extract safely using Python's `tarfile` module:
-
-```bash
-STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
-trap 'rm -rf "$STAGING"' EXIT
-
-# Same validation as encrypted path above
-python3 -c '
-import tarfile, sys, os, unicodedata
-
-MAX_MEMBERS = 10000
-MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
-MAX_PATH_LEN = 512
-TAR_METADATA_TYPES = {tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK}
-
-staging = sys.argv[1]
-archive_path = sys.argv[2]
-staging_real = os.path.realpath(staging)
-violations = []
-seen_names = set()
-total_bytes = 0
-count = 0
-safe_members = []
-
-with tarfile.open(archive_path, "r:gz") as tf:
-    for member in tf:
-        count += 1
-        if count > MAX_MEMBERS:
-            violations.append(f"Too many members (>{MAX_MEMBERS})")
-            break
-        raw = member.name
-        if ".." in raw.split("/"):
-            violations.append(f"Path traversal in raw name: {raw}")
-            continue
-        if any(ord(c) < 0x20 or 0x7f <= ord(c) <= 0x9f for c in raw):
-            violations.append(f"Control characters in path: {repr(raw)}")
-            continue
-        name = os.path.normpath(raw)
-        while name.startswith("./"):
-            name = name[2:]
-        if member.type in TAR_METADATA_TYPES:
-            continue
-        if member.issym() or member.islnk():
-            violations.append(f"Link rejected: {name}")
-            continue
-        if not (member.isreg() or member.isdir()):
-            violations.append(f"Special file rejected: {name} (type={member.type})")
-            continue
-        if len(name) > MAX_PATH_LEN:
-            violations.append(f"Path too long: {name[:80]}... ({len(name)} chars)")
-            continue
-        if os.path.isabs(name):
-            violations.append(f"Absolute path: {name}")
-        resolved = os.path.normpath(os.path.join(staging_real, name))
-        if not resolved.startswith(staging_real + os.sep) and resolved != staging_real:
-            violations.append(f"Path escape: {name}")
-        canon = unicodedata.normalize("NFC", name).casefold()
-        if canon in seen_names:
-            violations.append(f"Duplicate path (case/unicode-insensitive): {name}")
-        seen_names.add(canon)
-        if member.isreg():
-            total_bytes += member.size
-            if total_bytes > MAX_TOTAL_BYTES:
-                violations.append(f"Total size exceeds {MAX_TOTAL_BYTES} byte cap")
-                break
-        safe_members.append(member)
-    if violations:
-        for v in violations:
-            print(v, file=sys.stderr)
-        sys.exit(1)
-    tf.extractall(staging, members=safe_members)
-print(f"{len(safe_members)} members extracted safely.")
-' "$STAGING" "<package-path>"
-
-if [ $? -ne 0 ]; then
-  echo "Validation or extraction failed"
-  exit 1
+  echo "DECRYPTION_FAILED"
+  rm -f "$INNER_TAR"
+else
+  echo "DECRYPTED"
 fi
 ```
 
-Note: The `tarfile` module handles both GNU tar and BSD tar archives, PAX extended headers, and various tar formats portably. By filtering to `safe_members` before extraction, symlinks, hardlinks, and special files are never written to disk. Size caps and duplicate path detection prevent decompression bombs and ambiguous archives.
+If decryption fails, surface it and offer to retry:
 
-**Agent state note:** Shell `trap` and `$STAGING` variables do not persist between separate Bash tool calls. The squirrel MUST store the staging directory path in its own conversation state (e.g. note it after creation) and explicitly `rm -rf "$STAGING"` in every abort path and at the end of Step 8. Do not rely solely on `trap` for cleanup.
+```
+╭─ 🐿️ decryption failed
+│
+│  Wrong passphrase or corrupted package.
+│
+│  ▸ Try again?
+│  1. Yes
+│  2. Cancel
+╰─
+```
+
+On success, extract the inner archive into staging (same Python validation), then clean up:
+
+```bash
+# Extract inner archive content into staging using safe extraction
+python3 -c '<SAFE_EXTRACT_SCRIPT>' "$STAGING" "$INNER_TAR"
+
+# Clean up: remove payload.enc and inner tar
+rm -f "$INNER_TAR" "$STAGING/payload.enc"
+```
+
+After this step, the staging directory looks the same whether the package was encrypted or not: `manifest.yaml` + content files. All subsequent steps are identical.
+
+**Passphrase handling:** The passphrase MUST be passed via `env:` (environment variable), never as a CLI argument (visible in `ps`) or written to a file. The `WALNUT_PASSPHRASE=... openssl ...` syntax sets it for that single command only.
 
 ---
 
@@ -852,7 +708,7 @@ Imported from .walnut package: <original-filename>
 
 ### Step 8 -- Cleanup
 
-Move the original `.walnut` (or `.walnut.age`) file from its current location to the archive. If the file came from `03_Inputs/`, move it to `01_Archive/03_Inputs/`:
+Move the original `.walnut` file from its current location to the archive. If the file came from `03_Inputs/`, move it to `01_Archive/03_Inputs/`:
 
 Only auto-archive files that came from `03_Inputs/`. Files from other locations (e.g. Desktop) are left where the human put them.
 
@@ -874,31 +730,15 @@ if [ "$SHOULD_ARCHIVE" = "true" ]; then
   mkdir -p -- "$ARCHIVE_DIR"
   TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
-  # Handles compound extensions: name.walnut.age -> name-TS.walnut.age
   BASENAME="$(basename "<package-path>")"
   if [ -e "$ARCHIVE_DIR/$BASENAME" ]; then
     case "$BASENAME" in
-      *.walnut.age) STEM="${BASENAME%.walnut.age}"; EXT="walnut.age" ;;
-      *.walnut.meta) STEM="${BASENAME%.walnut.meta}"; EXT="walnut.meta" ;;
       *.walnut) STEM="${BASENAME%.walnut}"; EXT="walnut" ;;
       *) STEM="${BASENAME%.*}"; EXT="${BASENAME##*.}" ;;
     esac
     BASENAME="${STEM}-${TIMESTAMP}.${EXT}"
   fi
   mv -- "<package-path>" "$ARCHIVE_DIR/$BASENAME"
-
-  # Also archive .walnut.meta sidecar if present
-  if [ -f "<meta-path>" ]; then
-    META_BASE="$(basename "<meta-path>")"
-    if [ -e "$ARCHIVE_DIR/$META_BASE" ]; then
-      case "$META_BASE" in
-        *.walnut.meta) META_STEM="${META_BASE%.walnut.meta}"; META_EXT="walnut.meta" ;;
-        *) META_STEM="${META_BASE%.*}"; META_EXT="${META_BASE##*.}" ;;
-      esac
-      META_BASE="${META_STEM}-${TIMESTAMP}.${META_EXT}"
-    fi
-    mv -- "<meta-path>" "$ARCHIVE_DIR/$META_BASE"
-  fi
 fi
 ```
 
@@ -994,9 +834,7 @@ For capsule imports, offer to open the target walnut (not the capsule directly -
 
 ## Edge Cases
 
-**Package from `03_Inputs/` with no `.walnut.meta`:** Proceed normally. Meta is optional.
-
-**Encrypted package without `age` installed:** Block with install instructions. Do not attempt extraction.
+**Encrypted package with wrong passphrase:** The openssl decryption will fail. Offer to retry with a different passphrase.
 
 **Empty capsule (companion only, no raw/drafts):** Import it. The companion context has value on its own.
 

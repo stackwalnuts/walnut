@@ -35,7 +35,7 @@ while IFS= read -r -d '' entry; do
   esac
   COUNT=$((COUNT + 1))
   case "$name" in
-    *.walnut|*.walnut.age) WALNUT_COUNT=$((WALNUT_COUNT + 1)) ;;
+    *.walnut) WALNUT_COUNT=$((WALNUT_COUNT + 1)) ;;
   esac
 done < <(find "$INPUTS_DIR" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
 
