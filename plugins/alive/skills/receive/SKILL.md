@@ -111,70 +111,91 @@ If `age` is NOT installed, block:
 ╰─
 ```
 
-If `age` IS installed, first validate archive member paths before extracting, then decrypt and extract:
+If `age` IS installed, first validate archive member paths and types before extracting, then decrypt and extract:
 
 ```bash
 STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
+MEMBERS_FILE=$(mktemp "/tmp/walnut-members-XXXXXXXX")
+trap 'rm -rf "$STAGING" "$MEMBERS_FILE"' EXIT
 
-# Pre-extraction: list archive members and validate paths BEFORE writing anything
-age -d "<package-path>" | tar -tzf - > /tmp/walnut-members.txt 2>&1
-DECRYPT_EXIT=$?
-if [ $DECRYPT_EXIT -ne 0 ]; then
-  rm -rf "$STAGING"
-  echo "Decryption or archive listing failed (exit $DECRYPT_EXIT)"
+# Pre-extraction: verbose listing to get member types + paths
+# tar -tvzf shows file type indicators: 'd' for dirs, 'l' for symlinks, '-' for regular
+age -d "<package-path>" | tar -tvzf - > "$MEMBERS_FILE" 2>&1
+if [ ${PIPESTATUS[0]} -ne 0 ] || [ ${PIPESTATUS[1]} -ne 0 ]; then
+  echo "Decryption or archive listing failed"
   exit 1
 fi
 
-# Validate member paths before extraction (see Step 3)
+# Validate member paths AND types before extraction
 python3 -c "
-import sys
+import sys, re
 violations = []
 for line in open(sys.argv[1]):
-    member = line.strip()
-    if not member:
+    line = line.strip()
+    if not line:
         continue
+    # tar -tv output format: permissions owner/group size date time path
+    # First char of permissions indicates type: '-' regular, 'd' dir, 'l' symlink
+    parts = line.split(None, 5)
+    if len(parts) < 6:
+        continue
+    perms = parts[0]
+    member = parts[5].rstrip('/')
+    # Strip 'link -> target' from symlink entries
+    if ' -> ' in member:
+        member = member.split(' -> ')[0].strip()
+
+    # Reject symlinks and special file types (only allow regular files and dirs)
+    type_char = perms[0] if perms else '?'
+    if type_char == 'l':
+        violations.append(f'Symlink rejected: {member}')
+    elif type_char not in ('-', 'd'):
+        violations.append(f'Special file rejected: {member} (type: {type_char})')
+
+    # Reject path traversal
     if '..' in member.split('/'):
         violations.append(f'Path traversal: {member}')
     if member.startswith('/'):
         violations.append(f'Absolute path: {member}')
+
 if violations:
     for v in violations:
         print(v, file=sys.stderr)
     sys.exit(1)
-print(f'{sum(1 for l in open(sys.argv[1]) if l.strip())} members validated.')
-" /tmp/walnut-members.txt
+print('All archive members validated.')
+" "$MEMBERS_FILE"
 
 if [ $? -ne 0 ]; then
-  rm -rf "$STAGING"
-  rm -f /tmp/walnut-members.txt
-  echo "Archive contains unsafe paths -- aborting"
+  echo "Archive contains unsafe entries -- aborting"
   exit 1
 fi
 
-rm -f /tmp/walnut-members.txt
-
-# Now extract (paths already validated)
+# Now extract (paths and types already validated)
 age -d "<package-path>" | tar -xzf - -C "$STAGING"
 if [ ${PIPESTATUS[0]} -ne 0 ] || [ ${PIPESTATUS[1]} -ne 0 ]; then
-  rm -rf "$STAGING"
   echo "Decryption or extraction failed"
   exit 1
 fi
+
+# Clear trap (staging is now valid, managed by later steps)
+trap - EXIT
+rm -f "$MEMBERS_FILE"
 ```
 
 `age -d` prompts for the passphrase interactively in the terminal. The squirrel does not handle the passphrase. Note: the passphrase is entered twice (once for listing, once for extraction). This is the security tradeoff for pre-extraction validation.
 
 **If NOT encrypted:**
 
-First validate archive member paths, then extract:
+First validate archive member paths and types, then extract:
 
 ```bash
 STAGING=$(mktemp -d "/tmp/walnut-import-XXXXXXXX")
+MEMBERS_FILE=$(mktemp "/tmp/walnut-members-XXXXXXXX")
+trap 'rm -rf "$STAGING" "$MEMBERS_FILE"' EXIT
 
-# Pre-extraction: validate member paths
-tar -tzf "<package-path>" > /tmp/walnut-members.txt 2>&1
+# Pre-extraction: verbose listing to get member types + paths
+tar -tvzf "<package-path>" > "$MEMBERS_FILE" 2>&1
 if [ $? -ne 0 ]; then
-  rm -rf "$STAGING"
   echo "Archive listing failed -- file may be corrupted"
   exit 1
 fi
@@ -183,31 +204,50 @@ python3 -c "
 import sys
 violations = []
 for line in open(sys.argv[1]):
-    member = line.strip()
-    if not member:
+    line = line.strip()
+    if not line:
         continue
+    parts = line.split(None, 5)
+    if len(parts) < 6:
+        continue
+    perms = parts[0]
+    member = parts[5].rstrip('/')
+    if ' -> ' in member:
+        member = member.split(' -> ')[0].strip()
+
+    type_char = perms[0] if perms else '?'
+    if type_char == 'l':
+        violations.append(f'Symlink rejected: {member}')
+    elif type_char not in ('-', 'd'):
+        violations.append(f'Special file rejected: {member} (type: {type_char})')
+
     if '..' in member.split('/'):
         violations.append(f'Path traversal: {member}')
     if member.startswith('/'):
         violations.append(f'Absolute path: {member}')
+
 if violations:
     for v in violations:
         print(v, file=sys.stderr)
     sys.exit(1)
-print(f'{sum(1 for l in open(sys.argv[1]) if l.strip())} members validated.')
-" /tmp/walnut-members.txt
+print('All archive members validated.')
+" "$MEMBERS_FILE"
 
 if [ $? -ne 0 ]; then
-  rm -rf "$STAGING"
-  rm -f /tmp/walnut-members.txt
-  echo "Archive contains unsafe paths -- aborting"
+  echo "Archive contains unsafe entries -- aborting"
   exit 1
 fi
 
-rm -f /tmp/walnut-members.txt
-
-# Extract (paths already validated)
+# Extract (paths and types already validated)
 tar -xzf "<package-path>" -C "$STAGING"
+if [ $? -ne 0 ]; then
+  echo "Extraction failed"
+  exit 1
+fi
+
+# Clear trap (staging is now valid, managed by later steps)
+trap - EXIT
+rm -f "$MEMBERS_FILE"
 ```
 
 ---
@@ -331,7 +371,10 @@ Validate every file listed in `manifest.files` against its `sha256` checksum and
 python3 -c "
 import hashlib, sys, os, re, stat
 
-staging = sys.argv[1]
+MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB per file safety cap
+MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB total safety cap
+
+staging = os.path.realpath(sys.argv[1])
 manifest_path = os.path.join(staging, 'manifest.yaml')
 
 with open(manifest_path) as f:
@@ -351,29 +394,57 @@ if not entries:
     print('No file entries found in manifest -- manifest may be malformed or empty.', file=sys.stderr)
     sys.exit(1)
 
+# Guard: check declared total size before doing anything
+declared_total = sum(e['size'] for e in entries)
+if declared_total > MAX_TOTAL_SIZE:
+    print(f'Package declares {declared_total} bytes total -- exceeds {MAX_TOTAL_SIZE} byte safety cap.', file=sys.stderr)
+    sys.exit(1)
+
 for entry in entries:
-    fpath = os.path.join(staging, entry['path'])
+    path = entry['path']
+
+    # Validate the manifest path itself before joining
+    if os.path.isabs(path) or '..' in path.split('/'):
+        errors.append(f'Unsafe manifest path: {path}')
+        continue
+
+    fpath = os.path.normpath(os.path.join(staging, path))
+    # Verify resolved path is inside staging
+    if not fpath.startswith(staging + os.sep):
+        errors.append(f'Path escape via manifest: {path}')
+        continue
+
     if not os.path.exists(fpath):
-        errors.append(f'Missing: {entry[\"path\"]}')
+        errors.append(f'Missing: {path}')
         continue
 
     # Verify it's a regular file (not a device node, FIFO, etc.)
     st = os.lstat(fpath)
     if not stat.S_ISREG(st.st_mode):
-        errors.append(f'Not a regular file: {entry[\"path\"]} (mode {oct(st.st_mode)})')
+        errors.append(f'Not a regular file: {path} (mode {oct(st.st_mode)})')
         continue
 
     # Verify size matches manifest
     actual_size = st.st_size
     if actual_size != entry['size']:
-        errors.append(f'Size mismatch: {entry[\"path\"]} (expected {entry[\"size\"]}, got {actual_size})')
+        errors.append(f'Size mismatch: {path} (expected {entry[\"size\"]}, got {actual_size})')
         continue
 
-    with open(fpath, 'rb') as f:
-        digest = hashlib.sha256(f.read()).hexdigest()
+    if actual_size > MAX_FILE_SIZE:
+        errors.append(f'File too large: {path} ({actual_size} bytes exceeds {MAX_FILE_SIZE} byte cap)')
+        continue
 
-    if digest != entry['sha256']:
-        errors.append(f'Checksum mismatch: {entry[\"path\"]}')
+    # Stream hash in chunks (avoids loading entire file into memory)
+    h = hashlib.sha256()
+    with open(fpath, 'rb') as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            h.update(chunk)
+
+    if h.hexdigest() != entry['sha256']:
+        errors.append(f'Checksum mismatch: {path}')
     else:
         verified += 1
 
@@ -460,8 +531,12 @@ python3 -c "
 import os, sys
 target = os.path.realpath(sys.argv[1])
 world = os.path.realpath(sys.argv[2])
-if not target.startswith(world + os.sep):
-    print(f'Target {target} is outside world root {world}', file=sys.stderr)
+try:
+    common = os.path.commonpath([target, world])
+except ValueError:
+    common = ''
+if common != world or target == world:
+    print(f'Target {target} is not inside world root {world}', file=sys.stderr)
     sys.exit(1)
 print('Target path validated.')
 " "<target-path>" "<world-root>"
@@ -716,7 +791,7 @@ Move the original `.walnut` (or `.walnut.age`) file from its current location to
 mkdir -p "<world-root>/01_Archive/03_Inputs"
 
 # Move (not delete -- follows archive convention)
-# Use mv -n to avoid clobbering; if collision, append timestamp
+# If a file with the same name exists, append timestamp to avoid clobbering
 ARCHIVE_DIR="<world-root>/01_Archive/03_Inputs"
 BASENAME="$(basename "<package-path>")"
 if [ -e "$ARCHIVE_DIR/$BASENAME" ]; then
