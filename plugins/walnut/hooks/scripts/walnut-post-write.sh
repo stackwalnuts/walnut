@@ -33,7 +33,12 @@ case "$FILE_PATH" in
       # Debounce — skip if we regenerated in the last 5 minutes
       MARKER="/tmp/walnut-index-regen"
       if [ -f "$MARKER" ]; then
-        AGE=$(( $(date +%s) - $(stat -f%m "$MARKER" 2>/dev/null || echo "0") ))
+        if stat --version >/dev/null 2>&1; then
+          MARKER_MTIME=$(stat -c %Y "$MARKER" 2>/dev/null || echo "0")
+        else
+          MARKER_MTIME=$(stat -f %m "$MARKER" 2>/dev/null || echo "0")
+        fi
+        AGE=$(( $(date +%s) - MARKER_MTIME ))
         [ "$AGE" -lt 300 ] && exit 0
       fi
       touch "$MARKER"
