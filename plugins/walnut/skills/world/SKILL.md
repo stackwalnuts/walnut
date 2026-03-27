@@ -13,13 +13,14 @@ NOT a database dump. NOT a flat list. A living view of their world, grouped by w
 
 ## Load Sequence
 
-1. Find the ALIVE world root (walk up from PWD looking for `01_Archive/` + `02_Life/`)
-2. Scan all `_core/key.md` files — extract type, goal, phase, health, rhythm, next, updated, people, links, parent. Check `_core/key.md` first, fall back to walnut root.
-3. Scan all `_core/now.md` files — extract health status, last updated, active capsule, next action. Check `_core/now.md` first, fall back to walnut root.
-4. Scan `_core/_capsules/*/companion.md` frontmatter per walnut — count capsules by status (draft, prototype, published, done). Fall back to `_core/_working/` + `_core/_references/` counts.
-5. Build the tree — parent/child relationships from `parent:` field in `_core/key.md`
-6. Compute attention items
-7. Surface API context if configured (Gmail, Slack, Calendar via preferences.yaml)
+1. **Read the injected `<WORLD_INDEX>`** — it's already in your session context from the SessionStart hook. Contains every walnut's type, goal, phase, rhythm, updated, next, people, links, tags, capsules, and parent relationships. Zero file reads needed. If `<WORLD_INDEX>` is not in context, fall back to reading `.walnut/_index.yaml` directly.
+2. **If no index exists at all** — generate it first (`python3 .walnut/scripts/generate-index.py "$WORLD_ROOT"`), then read the output. If the script doesn't exist either, fall back to manual scanning: use Glob to find all `*/_core/key.md` files across the World, read each one's frontmatter (type, goal, rhythm, people, links, parent), then read matching `_core/now.md` frontmatter (phase, updated, next, capsule). Dispatch these reads as parallel subagents to keep it fast. This fallback only happens on first-time setup before the index infrastructure exists.
+3. Build the tree from the index — parent/child relationships from `parent:` field
+4. **Lightweight fresh checks** — one Bash call each, no subagents, no Explore agents:
+   - **Unsigned squirrels with stash:** `cd .walnut/_squirrels && for f in *.yaml; do grep -q "saves: 0" "$f" && ! grep -q "stash: \[\]" "$f" && echo "$f"; done 2>/dev/null` — if any files are returned, read those specific YAMLs to surface the stash items. If nothing returned, skip.
+   - **Unrouted inputs:** `ls 03_Inputs/ 2>/dev/null | grep -v '^\.' | grep -v '^Icon'` — just the filenames, no deep reads.
+   - **API context:** only if configured in preferences.yaml (Gmail, Slack, Calendar via MCP).
+5. Compute attention items from fresh checks + index staleness signals
 
 ## State Detection
 
@@ -178,21 +179,15 @@ What's been happening across the world. A pulse check.
 
 ---
 
-## Index Freshness Check
+## Index Freshness
 
-After rendering the dashboard, check if `.walnut/_index.yaml` exists and is recent (modified within the last 7 days). If stale or missing:
+The index regenerates automatically after every save (post-write hook detects `_core/now.md` writes). If the index is missing or the human asks for a fresh view, regenerate on demand:
 
-```
-╭─ 🐿️ index stale
-│  .walnut/_index.yaml is 12 days old.
-│
-│  ▸ Regenerate?
-│  1. Yes — run generate-index.py
-│  2. Skip
-╰─
+```bash
+python3 .walnut/scripts/generate-index.py "$WORLD_ROOT"
 ```
 
-If yes → run the index generator to rebuild `_index.yaml` from all walnut frontmatter. The index is always derived, never manually maintained.
+After regenerating, re-read `.walnut/_index.yaml` to render the updated dashboard.
 
 ---
 

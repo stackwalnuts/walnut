@@ -216,6 +216,7 @@ Follow the process from `world.md § Creating a New Walnut` exactly:
 7. Write first log entry: "Walnut created. {goal}" — signed with session_id
 8. If sub-walnut: set `parent: [[parent-name]]` in `_core/key.md` frontmatter
 9. Add `[[new-walnut-name]]` to parent's `_core/key.md` `links:` frontmatter field
+10. Update `.walnut/key.md` — add the new walnut to `## Connections`: `- [[new-walnut-name]] — {goal}`. If `.walnut/_index.yaml` exists, regenerate it too.
 
 ```
 ╭─ 🐿️ scaffolding...
