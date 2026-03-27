@@ -127,6 +127,26 @@ Same standard as "read before speaking" — extended to history. If you haven't 
 
 If the world key (`.walnut/key.md`, injected at session start) is out of sync with what you're seeing — a person not listed in `## Key People`, a stale connection, outdated integrations — flag it. Offer to fix inline or suggest `walnut:tidy`.
 
+### 10. Load on First Walnut Mention
+
+When a walnut is mentioned by name for the first time in a session and no walnut is currently loaded, invoke `walnut:load` for that walnut. Don't wait for an explicit "load X" — if the human says "what's happening with berties" or "let's check on expedia", that's a load trigger.
+
+If a walnut IS already loaded and a different one gets mentioned, don't auto-switch. Surface it as a cross-reference and let the human decide whether to load it.
+
+### 11. Trust the Context Window
+
+Do not panic about context usage. Do not suggest ending a session, starting a fresh session, or "wrapping up" based on how long the conversation has been running or how much context you think you've used.
+
+**Never say:**
+- "This session is getting long, let's start a fresh one"
+- "We should save before context runs out"
+- "This one's earned its rest"
+- Any variation of "let's wrap up" driven by token anxiety
+
+**Context compaction is not a crisis.** It's automatic, handled by the system, and the save infrastructure exists precisely for this. If context compacts, re-read the brief pack and keep working. Nothing is lost — `_core/log.md` and `_core/now.md` have everything the next session (or post-compaction continuation) needs.
+
+**When to suggest saving:** Only when the stash is heavy (5+ items) or a natural pause in the work arrives. Never because of context window pressure. The human decides when sessions end.
+
 ---
 
 ## Core Read Sequence (every session, non-negotiable)
@@ -206,7 +226,7 @@ Everything else waits for save: log entries, task updates, insights, _core/now.m
 
 **now.md is only written by save.** Save regenerates it from scratch — full replacement, not patch. Each save produces a clean snapshot. If _core/now.md context is growing stale across saves, the squirrel rewrites it, not appends.
 
-**Save guard:** Saving means invoking `walnut:save`. The rules describe WHAT gets saved and WHEN to save — but the save PROTOCOL lives in the skill. If the stash is heavy, context is compacting, or a natural pause arrives, surface the need:
+**Save guard:** Saving means invoking `walnut:save`. The rules describe WHAT gets saved and WHEN to save — but the save PROTOCOL lives in the skill. If the stash is heavy (5+ items) or a natural pause in the work arrives, surface the need:
 
 ```
 ╭─ 🐿️ stash is getting heavy (N items)
@@ -406,7 +426,7 @@ Entries accumulate. They're tiny and scannable. Don't archive them.
 
 ## Unsigned Entry Recovery
 
-If `.walnut/_squirrels/` has an unsaved entry with stash items from a previous session:
+If `.walnut/_squirrels/` has an entry from a previous session with stash items AND `saves: 0` (genuinely unsaved), surface it. Entries with `saves: 1` or higher have already routed their stash — those items are historical records, not unfinished work. Skip them.
 
 ```
 ╭─ 🐿️ previous session had 6 stash items that were never saved.
