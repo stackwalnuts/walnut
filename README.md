@@ -19,8 +19,6 @@ claude plugin install alive@walnut
 
 ---
 
----
-
 ## Why
 
 You've had those AI sessions where every word is on point. Where the output changes the scope of your project entirely, writes the copy perfectly, or smashes the architecture. You get out exactly what you wanted — or sometimes so much more.

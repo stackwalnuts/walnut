@@ -16,7 +16,7 @@ jobs:
 
       - name: Validate plugin structure
         run: |
-          PLUGIN_DIR="plugins/walnut"
+          PLUGIN_DIR="plugins/alive"
           ERRORS=0
 
           echo "=== Validating Walnut plugin structure ==="

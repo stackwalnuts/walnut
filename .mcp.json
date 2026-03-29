@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "walnut": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"],
-      "env": {}
-    }
-  }
-}

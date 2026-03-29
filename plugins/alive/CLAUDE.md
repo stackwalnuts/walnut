@@ -13,7 +13,7 @@ The world lives on their machine. Nothing phones home. Nothing leaves without th
 
 Read `.alive/key.md` to learn the person's name. Use it. They are not a "user."
 
-Install: `claude plugin install alive@stackwalnuts`
+Install: `claude plugin install alive@walnut`
 
 ---
 

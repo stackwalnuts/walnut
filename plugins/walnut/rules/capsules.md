@@ -18,7 +18,7 @@ Same anatomy, different destiny.
 
 Reference capsules CAN have non-versioned documents inside (synthesis.md, patterns.md) — these are derived context, not v0.x progression. If a synthesis grows big enough to need its own drafts, it spawns a work capsule.
 
-**Work capsules** — produce something specific. Goal describes a deliverable ("Rebuild hypha.nz from TWD strategy deck"). Iterates through v0.x drafts. Graduates to walnut root when v1 ships.
+**Work capsules** — produce something specific. Goal describes a deliverable ("Rebuild stellarforge.space from TWD strategy deck"). Iterates through v0.x drafts. Graduates to walnut root when v1 ships.
 
 No `capsule_type:` field needed — the `goal:` field tells you which kind it is.
 
