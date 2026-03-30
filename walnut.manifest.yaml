@@ -4,6 +4,6 @@ tags: [plugin, ai, claude-code, context, memory, local-first, markdown, producti
 author: "Stack Walnuts"
 category: "plugin"
 url: "https://alivecontext.com"
-repo: "https://github.com/stackwalnuts/walnut"
+repo: "https://github.com/stackwalnuts/alive"
 version: "2.0.0"
 license: "MIT"

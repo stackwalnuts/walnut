@@ -56,7 +56,7 @@ Templates in `plugins/alive/templates/` define the schema for system files. The 
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/stackwalnuts/walnut/issues) for bugs and feature requests.
+Use [GitHub Issues](https://github.com/stackwalnuts/alive/issues) for bugs and feature requests.
 
 ## License
 

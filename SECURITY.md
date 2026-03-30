@@ -32,7 +32,7 @@ The plugin ships 14 hooks that enforce security guarantees mechanically -- not b
 If you find a security issue -- hooks that can be bypassed, rules that can be circumvented, or any behavior that violates the guarantees above:
 
 - **Email:** hello@alivecontext.com
-- **GitHub:** Open a [security advisory](https://github.com/stackwalnuts/walnut/security/advisories/new)
+- **GitHub:** Open a [security advisory](https://github.com/stackwalnuts/alive/security/advisories/new)
 
 ## Scope
 

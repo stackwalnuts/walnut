@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="https://github.com/stackwalnuts/walnut/stargazers"><img src="https://img.shields.io/github/stars/stackwalnuts/walnut?style=flat&color=F97316&label=Stars" alt="GitHub Stars"></a>
-  <a href="https://github.com/stackwalnuts/walnut/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+  <a href="https://github.com/stackwalnuts/alive/stargazers"><img src="https://img.shields.io/github/stars/stackwalnuts/alive?style=flat&color=F97316&label=Stars" alt="GitHub Stars"></a>
+  <a href="https://github.com/stackwalnuts/alive/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://walnut.world"><img src="https://img.shields.io/badge/walnut.world-marketplace-brightgreen" alt="walnut.world"></a>
   <a href="https://x.com/stackwalnuts"><img src="https://img.shields.io/badge/𝕏-@stackwalnuts-000000?logo=x&logoColor=white" alt="@stackwalnuts"></a>
 </p>
@@ -246,7 +246,7 @@ The ALIVE Context System is our first product. We're not saying markdown is the 
 
 ## Contributing
 
-Want to build with us? [Open an issue](https://github.com/stackwalnuts/walnut/issues), join the conversation in [Discussions](https://github.com/stackwalnuts/walnut/discussions), or check the [contributing guide](CONTRIBUTING.md).
+Want to build with us? [Open an issue](https://github.com/stackwalnuts/alive/issues), join the conversation in [Discussions](https://github.com/stackwalnuts/alive/discussions), or check the [contributing guide](CONTRIBUTING.md).
 
 ---
 
@@ -254,7 +254,7 @@ Want to build with us? [Open an issue](https://github.com/stackwalnuts/walnut/is
   <br>
   <a href="https://alivecontext.com"><img src="https://img.shields.io/badge/🐿️_Alive_Context_System-alivecontext.com-F97316?style=for-the-badge&labelColor=0a0a0a" alt="ALIVE Context System"></a>
   &nbsp;&nbsp;
-  <a href="https://github.com/stackwalnuts/walnut"><img src="https://img.shields.io/github/stars/stackwalnuts/walnut?style=for-the-badge&logo=github&labelColor=0a0a0a&color=F97316" alt="Star on GitHub"></a>
+  <a href="https://github.com/stackwalnuts/alive"><img src="https://img.shields.io/github/stars/stackwalnuts/alive?style=for-the-badge&logo=github&labelColor=0a0a0a&color=F97316" alt="Star on GitHub"></a>
   &nbsp;&nbsp;
   <a href="https://x.com/stackwalnuts"><img src="https://img.shields.io/badge/𝕏-@stackwalnuts-F97316?style=for-the-badge&logo=x&logoColor=white&labelColor=0a0a0a" alt="Follow @stackwalnuts"></a>
   <br><br>
