@@ -4,6 +4,7 @@ species: outcome  # outcome | evergreen
 phase: draft  # draft | prototype | published | done
 sensitivity: private  # open | private | restricted
 version: 0.1
+due:  # optional — ISO date. Bundle-scoped tasks can inherit this deadline.
 
 description:
 author:
