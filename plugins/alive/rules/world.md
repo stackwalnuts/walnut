@@ -1,5 +1,5 @@
 ---
-version: 2.0.0
+version: 3.0.0
 type: foundational
 description: How worlds are built. Walnut anatomy, ALIVE domains, _kernel/ structure, bundles, archive, connections, People/.
 ---
@@ -43,51 +43,61 @@ A walnut is the unit of context. Any meaningful thing with its own identity, lif
 
 ```
 nova-station/
-  _kernel/                             ← system source files
+  _kernel/                             ← system source files (flat)
     key.md                             what it is (identity, rarely changes)
     log.md                             where it's been (prepend-only history)
     insights.md                        what's known (standing domain knowledge)
-    _generated/                        ← machine-produced projections
-      now.json                         current state snapshot (regenerated on save)
+    tasks.json                         work queue (script-operated, JSON)
+    now.json                           current state snapshot (script-generated)
+    completed.json                     archived completed tasks (JSON)
     links.yaml                         ← overflow: outbound connections
     people.yaml                        ← overflow: enriched people records
     history/                           ← overflow: log chapters
       chapter-01.md                    synthesized log segment
       chapter-02.md
-  bundles/                             ← units of work (the workshop)
-    shielding-review/
-      context.manifest.yaml            bundle index
-      tasks.md                         bundle-scoped work queue
-      observations.md                  agent observations
-      raw/                             source material
-        2026-03-12-screenshot.png
-    launch-checklist/
-      context.manifest.yaml
-      tasks.md
-      raw/
-  shielding-review/                    ← graduated bundle (moved out of bundles/)
-    context.manifest.yaml              historical record
-    shielding-review-v1.md             the output
-    raw/                               the sources
+  shielding-review/                    ← bundle (has context.manifest.yaml)
+    context.manifest.yaml              bundle index
+    tasks.json                         bundle-scoped work queue (JSON)
+    raw/                               source material
+      2026-03-12-screenshot.png
+  launch-checklist/                    ← bundle (has context.manifest.yaml)
+    context.manifest.yaml
+    tasks.json
+    raw/
+  shielding-review-v1.md              ← graduated output (stays alongside bundle)
   engineering/                         ← live context (the human's work)
   regulatory/
   marketing/
 ```
 
-**System source files live in `_kernel/`.** key.md, log.md, insights.md — the three source files the squirrel reads and writes. These are the canonical sources of truth.
+**Identification:** A folder with `_kernel/key.md` is a walnut. A folder with `context.manifest.yaml` is a bundle. `_kernel/` is the only underscore-prefixed directory.
 
-**Generated projections live in `_kernel/_generated/`.** now.json is produced by the save protocol — a computed snapshot, never hand-edited. Any tooling that needs current state reads from here.
+**System source files live in `_kernel/`.** key.md, log.md, insights.md — the three source files the squirrel reads and writes. tasks.json, now.json, completed.json — script-operated data files. All flat in `_kernel/`, no subdirectories for generated output.
 
 **Kernel overflow files** handle growth:
 - `links.yaml` — when `links:` in key.md gets long (10+ entries), move the full list here and keep key.md's `links:` as a summary pointer.
 - `people.yaml` — when `people:` in key.md gets long (5+ entries with enriched records), move the full records here. key.md keeps names and roles.
 - `history/` — log chapters. At 50 entries or phase close, synthesize older entries into `chapter-[nn].md` and keep log.md lean.
 
-**`bundles/` is the workshop.** Active bundles — both outcome and evergreen — live here. Outcome bundles graduate to walnut root when they ship v1. See `bundles.md` for lifecycle and management.
+**Bundles live flat in the walnut root** alongside `_kernel/`. Any folder at any depth with a `context.manifest.yaml` is a bundle. Bundles can contain bundles (unlimited depth). Bundles can contain walnuts. See `bundles.md` for lifecycle and management.
 
 **Everything else is live context.** The human's actual work — documents, assets, code, creative output. Includes things graduated from bundles, things created directly, and things shared with others.
 
-**Backward compat:** Check `_kernel/` first for system files. Fall back to `_core/` (v1 name) then walnut root for migrated or flat-structure walnuts. now.md at `_core/now.md` or walnut root is still valid — the system treats it as source until migrated to `_kernel/_generated/now.json`.
+**Backward compat:** Check `_kernel/` first for system files. Fall back to `_kernel/_generated/` (v2), then `_core/` (v1) for migrated or flat-structure walnuts. Check for `now.json` at `_kernel/now.json` first, fall back to `_kernel/_generated/now.json` (v2), fall back to `now.md` (v1). v2 `bundles/` container directory is still recognized during migration.
+
+---
+
+## Format Rules
+
+| Written by | Contains | Format | Examples |
+|------------|----------|--------|---------|
+| Script | Data consumed by scripts/UI | JSON | tasks.json, now.json, completed.json, _index.json |
+| Agent | Prose with metadata | Markdown + YAML frontmatter | log.md, insights.md, key.md |
+| Agent | Structured config/identity | YAML | context.manifest.yaml, preferences.yaml |
+
+JSON for script-operated files: built-in Python parser, zero dependencies. PyYAML deliberately avoided.
+
+---
 
 ### The Three Source Files
 
@@ -97,13 +107,13 @@ nova-station/
 | `_kernel/log.md` | History — signed entries, prepend-only, chronological | Every save |
 | `_kernel/insights.md` | Domain knowledge — standing facts that persist across sessions | When confirmed |
 
-### Generated Projections
+### Script-Operated Files
 
-| File | Purpose | Regenerated |
-|------|---------|-------------|
-| `_kernel/_generated/now.json` | Current state — phase, active bundle, next action, updated timestamp, squirrel, context | Every save |
-
-now.json is regenerated from scratch on every save — full replacement, not patch. It is a computed projection of the walnut's current state. Never hand-edit it. If you need to understand where a walnut is, read now.json. If you need to change where a walnut is, save and let the protocol rebuild it.
+| File | Purpose | Written by |
+|------|---------|------------|
+| `_kernel/tasks.json` | Work queue — urgent, active, waiting tasks | Script + agent |
+| `_kernel/now.json` | Current state snapshot — computed projection | `project.py` only |
+| `_kernel/completed.json` | Archived completed tasks | Script |
 
 ### key.md Frontmatter
 
@@ -161,20 +171,72 @@ Standing domain knowledge. Updated only when the human confirms an insight as ev
 ╰─
 ```
 
-### now.json (Generated)
+### now.json (Script-Generated)
+
+now.json lives at `_kernel/now.json`. It is computed by `project.py` post-save from all source files. The agent never writes now.json — the projection script reads all source files after every save and computes it.
 
 ```json
 {
   "phase": "testing",
   "updated": "2026-02-23T14:00:00",
   "bundle": "shielding-review",
-  "next": "Review telemetry from test window",
-  "squirrel": "2a8c95e9",
-  "context": "Shielding vendor shortlisted after 3 rounds. Test window confirmed March 4."
+  "next": {
+    "action": "Review telemetry from test window",
+    "bundle": "shielding-review",
+    "why": "Test window is March 4 — need telemetry reviewed before go/no-go"
+  },
+  "bundles": {
+    "active": [
+      {
+        "name": "shielding-review",
+        "status": "draft",
+        "goal": "Evaluate shielding vendors for orbital module",
+        "next": "Review telemetry from test window",
+        "updated": "2026-02-23T14:00:00"
+      }
+    ],
+    "recent": [
+      {
+        "name": "launch-checklist",
+        "status": "draft",
+        "updated": "2026-02-20T10:00:00"
+      }
+    ],
+    "summary": {
+      "total": 4,
+      "active": 1,
+      "draft": 2,
+      "done": 1
+    }
+  },
+  "unscoped_tasks": {
+    "urgent": ["Confirm insurance renewal by March 1"],
+    "active": ["Update investor deck with Q1 numbers"]
+  },
+  "recent_sessions": [
+    {
+      "id": "a8c95e9",
+      "date": "2026-02-23T14:00:00",
+      "summary": "Reviewed shielding vendor proposals, shortlisted two"
+    }
+  ],
+  "children": [
+    {
+      "name": "glass-cathedral",
+      "phase": "design",
+      "health": "active",
+      "next": "Finalize interior layout"
+    }
+  ],
+  "blockers": [
+    "Waiting on vendor NDA countersign"
+  ],
+  "context": "Shielding vendor shortlisted after 3 rounds. Test window confirmed March 4. Two vendors remain — Orbital Systems and ThermaShield. Insurance renewal due before launch window.",
+  "squirrel": "2a8c95e9"
 }
 ```
 
-`bundle:` points at the active bundle being worked on. `next:` is contextualized by which bundle it belongs to. Health is derived (see Health Signals below), not stored.
+`next:` is an object with action, bundle, and why. `bundles:` has three tiers — `active` (full detail), `recent` (light), `summary` (counts). Health is derived (see Health Signals below), not stored.
 
 **next: protection:** At save, the squirrel checks whether the previous `next:` was completed. If not, it surfaces the conflict. The previous `next:` is never silently dropped.
 
@@ -182,26 +244,41 @@ Standing domain knowledge. Updated only when the human confirms an insight as ev
 
 ## Bundles
 
-Units of work. Each bundle is a folder inside `bundles/` with a `context.manifest.yaml` index, scoped tasks, observations, and a `raw/` folder for source material. See `bundles.md` for full anatomy, lifecycle, species, and management.
+Units of work. Each bundle is a folder with a `context.manifest.yaml` index, scoped tasks, and a `raw/` folder for source material. Bundles live flat in the walnut root alongside `_kernel/`. See `bundles.md` for full anatomy, lifecycle, species, and management.
 
 Three-tier access: manifest frontmatter (scan) → manifest body fields (read) → raw files (deep).
 
-Outcome bundles graduate to walnut root when they ship v1 and the human confirms. The graduated folder at walnut root becomes a historical record alongside live context.
+### Graduation (Status Flip)
+
+When an outcome bundle ships v1:
+- `status:` changes to `done` or `published` in manifest
+- Bundle folder stays where it is — no folder moves
+- v1 output file lives inside the bundle folder (or alongside it at walnut root)
+- No ceremony, no folder moves. The status field is the record.
+
+### Bundle -> Walnut Graduation
+
+When a bundle outgrows its parent walnut, it can be promoted to its own walnut. See `bundles.md` for signals and process.
+
+### Nesting
+
+Bundles can contain bundles (unlimited depth). Bundles can contain walnuts. Identification is by marker file: `context.manifest.yaml` = bundle, `_kernel/key.md` = walnut.
 
 ### Legacy: _core/_capsules/, _working/, _references/
 
-Walnuts still using `_core/_capsules/` with `companion.md` files are supported. Walnuts using `_core/_working/` and `_core/_references/` are also supported. Migration converts these to bundles inside `bundles/`. See `bundles.md` for migration notes.
+Walnuts still using `_core/_capsules/` with `companion.md` files are supported. Walnuts using `_core/_working/` and `_core/_references/` are also supported. Migration converts these to bundles. See `bundles.md` for migration notes.
 
 ---
 
 ## Creating a New Walnut
 
 1. Create the walnut folder under the appropriate ALIVE domain (or `People/` for a person).
-2. Create `_kernel/` and `_kernel/_generated/` inside it.
+2. Create `_kernel/` inside it (flat, no subdirectories).
 3. Write the 3 source files to `_kernel/`: key.md, log.md, insights.md.
-4. Generate `_kernel/_generated/now.json` with initial state.
-5. Create `bundles/`.
-6. Record `parent:` in `_kernel/key.md` if this is a sub-walnut.
+4. Create `_kernel/tasks.json` with `{"tasks": []}`.
+5. Create `_kernel/completed.json` with `{"completed": []}`.
+6. Run `project.py --walnut {path}` to generate initial `_kernel/now.json`.
+7. Record `parent:` in `_kernel/key.md` if this is a sub-walnut.
 
 ---
 
@@ -246,7 +323,7 @@ Archive is graduation. The walnut served its purpose. Still indexed, still searc
 
 ## Health Signals
 
-For endeavors (ventures, experiments, campaigns). Calculated from `rhythm:` in `_kernel/key.md` and `updated:` in `_kernel/_generated/now.json`.
+For endeavors (ventures, experiments, campaigns). Calculated from `rhythm:` in `_kernel/key.md` and `updated:` in `_kernel/now.json`.
 
 ### Calculation
 

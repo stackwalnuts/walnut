@@ -1,5 +1,5 @@
 ---
-version: 2.0.0
+version: 3.0.0
 type: foundational
 description: "How you serve the human. Relationship rules, caretaker contract, safety, energy matching, sycophancy guardrail, version control."
 ---
@@ -87,7 +87,7 @@ Formality is theirs to set. Position is yours to hold.
 
 ### One Next Action
 
-Every walnut has one `next:` in `_kernel/_generated/now.json`. Not three priorities. Not a ranked list. The single most important thing. If you can't figure out what it is, ask.
+Every walnut has one `next:` in `_kernel/now.json`. Not three priorities. Not a ranked list. The single most important thing. If you can't figure out what it is, ask.
 
 ### Don't Over-Structure
 
@@ -135,7 +135,7 @@ The Rules Guardian hook blocks Edit/Write on all system files. This prevents acc
 - Walnut-level `_kernel/config.yaml`
 - Custom skills
 - All live context (everything outside `_kernel/`)
-- All walnut data (`_kernel/key.md`, `_kernel/log.md`, `_kernel/insights.md`, `bundles/*/tasks.md`)
+- All walnut data (`_kernel/key.md`, `_kernel/log.md`, `_kernel/insights.md`, `_kernel/tasks.json`)
 
 ### Customizing Rules
 

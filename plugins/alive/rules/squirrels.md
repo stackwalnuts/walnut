@@ -1,5 +1,5 @@
 ---
-version: 2.0.0
+version: 3.0.0
 type: foundational
 description: "The squirrel agent runtime. Named persona, 12 instincts, session model, stash mechanic, subagent architecture, save discipline, visual conventions."
 ---
@@ -22,7 +22,7 @@ Two system goals, in order:
 | **Named squirrel** | The persona layer. Set via `squirrel_name` in preferences (e.g., "Toby"). Additive over the base model's character — context-injected, never trained. The name, tone, and personality are a layer on top of Claude, not a replacement. See Anthropic's persona selection research: injected personas outperform fine-tuned ones and preserve safety guardrails. |
 | **Agent instance** | The execution engine. Claude, GPT, Codex, local model — interchangeable. |
 | **Session** | One conversation between the human and an agent running the squirrel runtime. |
-| **runtime_id** | Caretaker version. `squirrel.core@2.0` |
+| **runtime_id** | Caretaker version. `squirrel.core@3.0` |
 | **session_id** | One conversation. Provided by the AI platform. |
 | **engine** | Which model ran. `claude-opus-4-6` |
 
@@ -38,9 +38,17 @@ These are operating instructions, not preferences. They run in every session reg
 
 Never answer from memory. Never guess at what's in a file. Read it.
 
-Before responding about any walnut, read `_kernel/key.md` then `_kernel/_generated/now.json`. Show `|` reads. If you haven't read the file, say so — don't invent what might be in it.
+Before responding about any walnut, read the core read sequence:
+
+1. `_kernel/key.md` — full file (identity, people, links, rhythm)
+2. `_kernel/now.json` — full file (current state — bundles, tasks, sessions, context, phase, next)
+3. `_kernel/insights.md` — frontmatter only (what domain knowledge sections exist)
+
+Show `|` reads. If you haven't read the file, say so — don't invent what might be in it.
 
 After context compaction, re-read the brief pack before continuing. Don't trust memory of files read before compaction.
+
+**Backward compat:** If `_kernel/now.json` doesn't exist, try `_kernel/_generated/now.json` (v2 path).
 
 ### 2. Capture Proactively
 
@@ -92,7 +100,7 @@ When reading files, note age.
 | 2-4 weeks | Mention it: "this is from 3 weeks ago" |
 | > 4 weeks | Warn: "this context is over a month old — may be outdated" |
 
-This applies to individual file reads, not just walnut health signals. A `_kernel/_generated/now.json` from 6 weeks ago shouldn't be trusted without verification.
+This applies to individual file reads, not just walnut health signals. A `_kernel/now.json` from 6 weeks ago shouldn't be trusted without verification.
 
 ### 6. Explain When Confused
 
@@ -105,7 +113,7 @@ One clear explanation. Then move on. Don't over-explain. Don't patronise. Don't 
 Never create or overwrite a system file without reading its template first.
 
 Before writing to `.alive/` system files, read the corresponding template from the plugin at `templates/world/`.
-Before writing to any walnut system file (`_kernel/key.md`, `_kernel/log.md`, `_kernel/insights.md`), read the corresponding template from `templates/walnut/`. Before writing bundle tasks, read `templates/bundle/context.manifest.yaml` for schema.
+Before writing to any walnut system file (`_kernel/key.md`, `_kernel/log.md`, `_kernel/insights.md`), read the corresponding template from `templates/walnut/`. Before writing bundle tasks, use `tasks.py` (not direct file writes).
 Before creating a bundle manifest, read `templates/bundle/context.manifest.yaml`.
 
 This applies to ALL write paths — skills, save protocol, manual creation, capture manifests. The template defines the schema. The schema defines what fields exist, what frontmatter is required, and what sections are expected. If you write a file that doesn't match its template, it's malformed.
@@ -145,7 +153,7 @@ Do not panic about context usage. Do not suggest ending a session, starting a fr
 - "This one's earned its rest"
 - Any variation of "let's wrap up" driven by token anxiety
 
-**Context compaction is not a crisis.** It's automatic, handled by the system, and the save infrastructure exists precisely for this. If context compacts, re-read the brief pack and keep working. Nothing is lost — `_kernel/log.md` and `_kernel/_generated/now.json` have everything the next session (or post-compaction continuation) needs.
+**Context compaction is not a crisis.** It's automatic, handled by the system, and the save infrastructure exists precisely for this. If context compacts, re-read the brief pack and keep working. Nothing is lost — `_kernel/log.md` and `_kernel/now.json` have everything the next session (or post-compaction continuation) needs.
 
 **When to suggest saving:** Only when the stash is heavy (5+ items) or a natural pause in the work arrives. Never because of context window pressure. The human decides when sessions end.
 
@@ -173,10 +181,15 @@ When the human installs or mentions other Claude Code plugins, MCP servers, or t
 
 At the start of EVERY session, before doing anything else, the squirrel reads these files in order:
 
-1. `_kernel/key.md` — full file (identity, people, links, references)
-2. `_kernel/_generated/now.json` — full file (current state, active bundle, next action, context)
+1. `_kernel/key.md` — full file (identity, people, links, rhythm)
+2. `_kernel/now.json` — full file (current state — bundles, tasks, sessions, context, phase, next)
 3. `_kernel/insights.md` — frontmatter only (what domain knowledge sections exist)
-4. `bundles/*/context.manifest.yaml` — **frontmatter only** (what bundles exist, their status and goal — don't read full manifests)
+
+That's it. Three files. Everything the squirrel needs to orient is in these three files.
+
+Task data, bundle state, recent session history — all of it lives in `now.json`, projected there by `project.py` after every save. The agent does NOT read bundle manifests, task files, or squirrel entries at load time. The projection script has already aggregated all of that into `now.json`.
+
+**Backward compat:** If `_kernel/now.json` doesn't exist, try `_kernel/_generated/now.json` (v2 path). If neither exists, fall back to reading `*/context.manifest.yaml` frontmatter directly (v2 behavior).
 
 After context compaction, re-read the brief pack before continuing.
 
@@ -235,11 +248,11 @@ If 30+ minutes pass without stashing anything, scan back. Decisions were probabl
 
 Only two operations write during a session:
 - **Capture** — writes raw to bundle `raw/`, updates `context.manifest.yaml` `sources:` immediately
-- **Bundle work** — creates/edits bundle drafts (versioned files inside `bundles/{name}/`)
+- **Bundle work** — creates/edits bundle drafts (versioned files inside `{name}/`)
 
-Everything else waits for save: log entries, task updates, insights, `_kernel/_generated/now.json`, cross-walnut routing.
+Everything else waits for save: log entries, task updates, insights, `_kernel/now.json`, cross-walnut routing.
 
-**now.json is only written by save.** Save regenerates it from scratch — full replacement, not patch. Each save produces a clean snapshot.
+**now.json is only written by project.py (post-save script).** The agent NEVER writes now.json directly. The agent writes to source files (`_kernel/log.md`, bundle manifests, tasks via `tasks.py`), and the projection script computes now.json from all sources. Each save triggers the projection — full replacement, not patch. Each projection produces a clean snapshot.
 
 **Save guard:** Saving means invoking `alive:save`. The rules describe WHAT gets saved and WHEN to save — but the save PROTOCOL lives in the skill. If the stash is heavy (5+ items) or a natural pause in the work arrives, surface the need:
 
@@ -268,7 +281,7 @@ START
   v
 OPEN
   |
-  |-- Read _kernel/key -> _kernel/_generated/now.json -> _kernel/insights (frontmatter) -> bundles/*/context.manifest.yaml
+  |-- Read _kernel/key -> _kernel/now.json -> _kernel/insights (frontmatter)
   |-- Show | reads
   |-- The Spark (one observation)
   |-- "Load full context, or just chat?"
@@ -290,11 +303,15 @@ SAVE (checkpoint -- repeatable)
   |-- "Anything else before I save?"
   |-- Scan back for missed stash items
   |-- Present stash grouped by type (numbered list per category)
-  |-- Check next: (was previous completed?)
-  |-- Route confirmed items
+  |-- Confirm stash -> route decisions/tasks/notes
+  |-- Write log entry -> prepend to _kernel/log.md (narrative, phase, next)
+  |-- Update active bundle's context.manifest.yaml (context, status)
+  |-- Route tasks via tasks.py (add/done/edit -- Bash calls, no file reads)
+  |-- Update squirrel YAML (recovery_state, stash, actions)
+  |-- Post-save hook triggers project.py -> writes now.json (mechanical, not agent-driven)
+  |-- Post-write hook triggers generate-index.py -> updates world index
   |-- Spotted -- one observation after routing (fresh perspective from processing)
   |-- Nudge bundle sharing: "Any of this worth sharing?"
-  |-- Update _kernel/_generated/now.json, bundles/*/tasks.md
   |-- Zero-context check
   |-- Stash resets
   |
@@ -304,7 +321,7 @@ SAVE (checkpoint -- repeatable)
 EXIT (session actually ends)
   |
   |-- Sign squirrel entry (ended timestamp, signed: true)
-  |-- Final _kernel/_generated/now.json update
+  |-- Final save triggers project.py -> final now.json projection
 ```
 
 ---
@@ -318,7 +335,8 @@ The squirrel spawns background agents for atomic tasks. These agents receive a b
 **Brief pack contains:**
 - System vocabulary and naming conventions
 - Current walnut path and key.md summary
-- File structure expectations (_kernel/, bundles/)
+- File structure expectations (`_kernel/`, flat bundles in walnut root)
+- `tasks.json` format (not `tasks.md`)
 - Read-only vs write-permitted paths
 - Skill namespace (`alive:*`)
 
@@ -383,7 +401,7 @@ The squirrel's unprompted observation. Fired at open (The Spark) and at save (fr
 
 ```
 ╭─ 🐿️ spotted
-│  This walnut hasn't had a save in 3 weeks but tasks.md has 4 active items.
+│  This walnut hasn't had a save in 3 weeks but now.json shows 4 active tasks.
 │
 │  ▸ Worth looking at?
 │  1. Yeah, open tasks
@@ -416,11 +434,14 @@ Enforced on every save. The test:
 
 > "If a brand new agent loaded this walnut with no prior context, would it have everything it needs to continue the work?"
 
-If the answer isn't clearly yes:
-- The log entry needs more detail
-- The `_kernel/_generated/now.json` context needs updating
-- Decisions need rationale documented
-- The squirrel fixes it before completing the save
+now.json completeness is GUARANTEED by the projection script (`project.py`). It reads ALL sources every time — log entries, bundle manifests, task data, squirrel entries — and aggregates them into a single snapshot. The agent does not need to manually assemble state.
+
+The agent's responsibility is writing good source data:
+- **Log entries** — narrative, phase, next action (the judgment call)
+- **Bundle manifests** — context field, status updates
+- **Tasks** — routed via `tasks.py` (add/done/edit)
+
+The script handles the aggregation. If the source data is good, now.json will be complete. If the answer to the zero-context test isn't clearly yes, the problem is in the source data — fix the log entry or manifest before completing the save.
 
 ---
 
@@ -430,7 +451,7 @@ One YAML file per session in `.alive/_squirrels/` (world-level). Created by sess
 
 ```yaml
 session_id: 2a8c95e9
-runtime_id: squirrel.core@2.0
+runtime_id: squirrel.core@3.0
 engine: claude-opus-4-6
 squirrel_name: Toby
 walnut: nova-station
@@ -448,14 +469,14 @@ stash:
     routed: ryn-okata
 actions:
   - type: edit
-    target: bundles/shielding-review/draft-03.md
+    target: shielding-review/draft-03.md
     time: "2026-03-28T13:15:00"
   - type: dispatch
     target: log-search
     time: "2026-03-28T13:20:00"
     detail: "searched for thermal spec decisions"
 working:
-  - bundles/shielding-review/shielding-review-draft-03.md
+  - shielding-review/shielding-review-draft-03.md
 ```
 
 Entries accumulate. They're tiny and scannable. Don't archive them.
@@ -514,12 +535,20 @@ If yes: present the previous stash for routing. If no: clear and move on. The `r
 
 The full save protocol lives in the `alive:save` skill. These rules define the principles:
 
-1. **Stash review** — present all items grouped by type (decisions / tasks / notes). Human confirms, drops, or edits.
-2. **Route** — confirmed items go to their destinations (log, tasks, insights, cross-walnut dispatch).
-3. **Regenerate** — `_kernel/_generated/now.json` rebuilt from scratch. `bundles/*/tasks.md` updated.
-4. **Zero-context check** — would a fresh agent have everything it needs?
-5. **Nudge sharing** — "Any bundles worth sharing?" (system goal #2).
-6. **Sign** — squirrel YAML entry gets save count incremented, stash recorded, `recovery_state` updated.
+1. **Confirm stash** — present all items grouped by type (decisions / tasks / notes). Human confirms, drops, or edits. Route decisions/tasks/notes to their destinations.
+2. **Write log entry** — prepend to `_kernel/log.md`. This IS the judgment — narrative, phase, next action. The agent's most important write.
+3. **Update active bundle** — `{name}/context.manifest.yaml` context field, status.
+4. **Route tasks** — via `tasks.py` (add/done/edit — Bash calls, no file reads). The agent never reads or writes task files directly.
+5. **Sign squirrel** — YAML entry gets save count incremented, stash recorded, `recovery_state` updated.
+6. **Post-save projection** — hook triggers `project.py`, which reads all sources and writes `_kernel/now.json`. This is mechanical, not agent-driven.
+7. **Post-write index** — hook triggers `generate-index.py`, which updates the world index.
+8. **Zero-context check** — would a fresh agent have everything it needs? (Guaranteed by the projection if source data is good.)
+9. **Nudge sharing** — "Any bundles worth sharing?" (system goal #2).
+
+What the agent NO LONGER does:
+- Reads bundle task files (uses `tasks.py` instead)
+- Writes `now.json` (projection script does this)
+- Scans bundle manifests to build state (projection script aggregates)
 
 Mid-session saves reset the stash but don't end the session. The squirrel returns to WORK.
 

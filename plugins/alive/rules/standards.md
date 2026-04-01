@@ -1,5 +1,5 @@
 ---
-version: 2.0.0
+version: 3.0.0
 type: foundational
 description: Frontmatter, file naming, signing, wikilinks, third-party skill overrides.
 ---
@@ -18,7 +18,7 @@ Every `.md` and `.yaml` file in the system has YAML frontmatter (or IS YAML). No
 
 | File type | Required frontmatter |
 |-----------|---------------------|
-| System files (key, now.json, log, insights, tasks) | Schema defined in world.md |
+| System files (key, now.json, log, insights, tasks.json, completed.json) | Schema defined in world.md |
 | Bundle manifests (context.manifest.yaml) | type: bundle, goal, status, version, sensitivity, pii, sources, linked_bundles, tags |
 | Working files (legacy) | squirrel, model, version, previous, kept, changed |
 | Reference companions (legacy) | type, description, type-specific fields, squirrel, tags |
@@ -44,7 +44,7 @@ Squirrel entries carry the full metadata: session_id, runtime_id, engine, walnut
 
 ## File Naming
 
-### Bundle Folders (bundles/)
+### Bundle Folders
 
 Pattern: `kebab-case-descriptive-name/`
 
@@ -63,7 +63,7 @@ Versions are files inside the bundle. No version in folder name. File names incl
 Pattern: `{bundle-name}-draft-{nn}.md` for working drafts, `{bundle-name}-v1.md` for shipped.
 
 ```
-bundles/shielding-review/
+shielding-review/
   context.manifest.yaml                 <- THE INDEX
   shielding-review-draft-01.md          <- first draft
   shielding-review-draft-02.md          <- iterated
@@ -97,7 +97,7 @@ Garbage filenames get renamed on import. The original name is preserved in the c
 Same name as the raw file, `.md` extension. Lives alongside the raw file's parent directory (not inside `raw/`).
 
 ```
-bundles/transcripts/
+transcripts/
   2026-02-23-jax-shielding-review.md      <- companion
   raw/
     2026-02-23-jax-shielding-review.mp3   <- raw
@@ -131,8 +131,8 @@ External plugins (superpowers, etc.) assume standard code project layouts — `d
 
 | Skill output | Route to instead |
 |-------------|-----------------|
-| `docs/plans/*.md` | `{active-walnut}/bundles/{bundle-name}/` (create bundle if needed) |
-| `docs/*.md` | `{active-walnut}/bundles/{bundle-name}/` |
+| `docs/plans/*.md` | `{active-walnut}/{bundle-name}/` (create bundle if needed) |
+| `docs/*.md` | `{active-walnut}/{bundle-name}/` |
 | Any file at World root | Determine the walnut it belongs to, route to a bundle |
 
 **No orphan files at World root.** The only things at root level are the 5 ALIVE domain folders, `.claude/`, and dotfiles. Everything else belongs inside a walnut.
