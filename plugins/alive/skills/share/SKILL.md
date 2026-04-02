@@ -213,9 +213,22 @@ print(f'accepted_peers:{len(accepted)}')
 "
 ```
 
+**Check discovery_hints preference** (used for Tip lines below):
+
+```bash
+HINTS=$(python3 -c "
+import pathlib, re
+p = pathlib.Path.home() / '.alive' / 'preferences.yaml'
+if not p.exists(): print('true')
+else:
+    m = re.search(r'^discovery_hints:\s*(\S+)', p.read_text(), re.MULTILINE)
+    print('false' if m and m.group(1).strip().lower() == 'false' else 'true')
+" 2>/dev/null || echo "true")
+```
+
 **Present options based on relay state:**
 
-No relay or no accepted peers:
+No relay configured (relay.json does not exist):
 
 ```
 ╭─ 🐿️ encryption
@@ -223,8 +236,27 @@ No relay or no accepted peers:
 │  ▸ encrypt the package?
 │  1. Passphrase -- AES-256, you share the passphrase separately
 │  2. No encryption -- plaintext .walnut file
+│
+│  Tip: Set up a relay to push packages directly -- no file transfer needed.
 ╰─
 ```
+
+The `Tip:` line is only shown when `HINTS` is `'true'`.
+
+Relay configured but no accepted peers (accepted_peers is 0):
+
+```
+╭─ 🐿️ encryption
+│
+│  ▸ encrypt the package?
+│  1. Passphrase -- AES-256, you share the passphrase separately
+│  2. No encryption -- plaintext .walnut file
+│
+│  Tip: Your relay is ready. Invite a peer with /alive:relay add <username>.
+╰─
+```
+
+The `Tip:` line is only shown when `HINTS` is `'true'`.
 
 Relay with accepted peers:
 
@@ -320,8 +352,12 @@ Capture the output path and size from the result.
 │
 │  Ready to send via email, AirDrop, Slack, USB -- whatever works.
 │  Recipient imports with /alive:receive.
+│
+│  Tip: With a relay, packages push directly -- no file to send.
 ╰─
 ```
+
+The `Tip:` line is only shown when `HINTS` is `'true'` and `ENCRYPT_MODE` is not `relay`.
 
 If unencrypted:
 
@@ -336,8 +372,12 @@ If unencrypted:
 │
 │  This package is not encrypted. Anyone with the file can read it.
 │  Send via a trusted channel, or re-share with /alive:share and pick passphrase.
+│
+│  Tip: With a relay, packages push directly -- no file to send.
 ╰─
 ```
+
+The `Tip:` line is only shown when `HINTS` is `'true'` and `ENCRYPT_MODE` is not `relay`.
 
 If relay encryption was selected, note that the local copy is unencrypted but the relay push will RSA-encrypt per peer:
 
