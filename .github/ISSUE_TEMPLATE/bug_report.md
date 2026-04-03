@@ -6,35 +6,26 @@ labels: bug
 assignees: ''
 ---
 
-**Plugin version:** <!-- e.g. 1.0.1-beta -->
+**Plugin version:** <!-- e.g. 2.0.0 -->
 **Claude Code version:** <!-- claude --version -->
 **OS:** <!-- e.g. macOS 15.3 -->
 **Model:** <!-- e.g. claude-opus-4-6 -->
-**Runtime:** <!-- e.g. squirrel.core@1.0 -->
 
-## Behavior
+## What happened
 
-**Expected:**
+<!-- What you did and what went wrong. Include the skill/command you ran. -->
 
-**Actual:**
+## Error output
 
-## Reproduction
-
-<!-- Skill invoked, walnut state, or sequence of actions. -->
+<!-- Paste any error messages from hooks or Claude Code stderr. -->
 
 ```
 ```
 
-## System State
+## Environment
 
-<!-- Paste relevant: squirrel YAML entry, hook output, or _core/now.md frontmatter. -->
-
-```yaml
-```
-
-## Logs
-
-<!-- Any error output from hooks or Claude Code stderr. -->
+<!-- Run this and paste the output — it only shows structure, not your content: -->
+<!-- ls _kernel/ && echo "---bundles:" && ls */context.manifest.yaml 2>/dev/null -->
 
 ```
 ```

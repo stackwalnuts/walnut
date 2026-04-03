@@ -65,16 +65,6 @@
         ]
       },
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/alive-archive-enforcer.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
         "matcher": "mcp__.*",
         "hooks": [
           {

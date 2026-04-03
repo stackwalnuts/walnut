@@ -14,7 +14,7 @@
 ---
 
 ```bash
-claude plugin install alive@walnut
+claude plugin install alive@stackwalnuts
 ```
 
 ---
@@ -146,7 +146,7 @@ A save triggers the generation chain: bundle manifests → `now.json` → `world
 ## Install
 
 ```bash
-claude plugin install alive@walnut
+claude plugin install alive@stackwalnuts
 ```
 
 That's it. The ALIVE Context System is a Claude Code plugin. 15 skills, 14 hooks, 6 rule files, templates, and a statusline.
@@ -175,7 +175,7 @@ That's it. The ALIVE Context System is a Claude Code plugin. 15 skills, 14 hooks
 
 ```bash
 # Install the new plugin
-claude plugin install alive@walnut
+claude plugin install alive@stackwalnuts
 
 # Run the upgrade
 /alive:system-upgrade

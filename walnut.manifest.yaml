@@ -1,8 +1,8 @@
 name: "alive"
 description: "ALIVE Context System — a living context system for Claude Code. The successor to PARA. Your life in walnuts."
-tags: [plugin, ai, claude-code, context, memory, local-first, markdown, productivity, alive-context-system]
+tags: [pcm, personal-context-manager, ai, claude-code, context, memory, markdown, productivity, alive-context-system]
 author: "Stack Walnuts"
-category: "plugin"
+category: "pcm"
 url: "https://alivecontext.com"
 repo: "https://github.com/stackwalnuts/alive"
 version: "2.0.0"

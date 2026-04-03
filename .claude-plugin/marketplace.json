@@ -12,14 +12,8 @@
     {
       "name": "alive",
       "source": "./plugins/alive",
-      "description": "ALIVE Context System — a living context system for Claude Code. Your life in walnuts. Build walnuts, share bundles.",
+      "description": "ALIVE Context System — Personal Context Manager for Claude Code. Your life in walnuts.",
       "version": "2.0.0"
-    },
-    {
-      "name": "walnut",
-      "source": "./plugins/walnut",
-      "description": "Walnut context system (sunset — use 'alive' for v2). Legacy support only.",
-      "version": "1.0.1-beta"
     }
   ]
 }

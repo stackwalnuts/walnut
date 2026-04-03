@@ -6,7 +6,7 @@ All notable changes to the ALIVE Context System plugin are documented here.
 
 ### The ALIVE Context System
 
-Complete architecture overhaul. Product name: ALIVE Context System. Plugin: `alive`. Install: `claude plugin install alive@walnut`.
+Complete architecture overhaul. Product name: ALIVE Context System. Plugin: `alive`. Install: `claude plugin install alive@stackwalnuts`.
 
 ### Architecture
 - **Kernel replaces core:** `_core/` -> `_kernel/`. Three source files: key.md, log.md, insights.md

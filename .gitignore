@@ -1,7 +1,9 @@
 .DS_Store
-og-option-*.html
-og-hero-animated.html
-og-social-preview.png
 node_modules/
 dist/
-package-lock.json
+__pycache__/
+*.pyc
+.env
+.env.*
+.alive/
+.walnut/
