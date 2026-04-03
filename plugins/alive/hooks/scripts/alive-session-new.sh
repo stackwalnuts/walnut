@@ -345,7 +345,29 @@ if [ -n "$WORLD_ROOT" ]; then
      [ -d "$WORLD_ROOT/People" ] 2>/dev/null || \
      [ -d "$WORLD_ROOT/03_Inputs" ] 2>/dev/null; then
     UPGRADE_NEEDED="
-UPGRADE REQUIRED: This world has v2 structure (bundles/ folders, _kernel/_generated/, tasks.md, or legacy domain names). Run /alive:system-upgrade to migrate to v3. The system will work but performance and features are degraded until you upgrade."
+--- MESSAGE FROM THE DEVELOPER ---
+
+Hey — you're running ALIVE v3 on a v2 world. We shipped a major architectural update based on feedback from the first 500 users. Here's what changed and why:
+
+WHAT'S NEW IN v3:
+- Script-operated tasks (tasks.py CLI replaces tasks.md — faster, no context burn)
+- True projections (now.json computed from ALL sources post-save — concurrent sessions don't clobber each other)
+- Flat kernel (_generated/ subfolder removed — 6 files flat in _kernel/)
+- Flat bundles (bundles/ container removed — bundles sit next to _kernel/ in walnut root)
+- 03_Inputs renamed to 03_Inbox (universally understood)
+- 3-file load sequence (key.md + now.json + insights.md — down from 13+ file reads)
+- Observations.md removed (stash routes to log at save)
+
+WHY: Loading a walnut was reading 13+ files. Task tracking was broken across 129 zombie files. Concurrent sessions clobbered each other's context. This release fixes all of it.
+
+YOUR WORLD NEEDS MIGRATION. Run:
+
+  /alive:system-upgrade
+
+It will show you exactly what changes, back everything up, and migrate your world. Takes a few minutes. Nothing breaks if you don't — but you'll be running v3 rules on v2 structure, which means degraded performance and missing features.
+
+— Ben (@benslockedin)
+---"
   fi
 fi
 
