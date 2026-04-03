@@ -334,13 +334,28 @@ elif [ "${ALIVE_MIGRATION_CONFLICT:-}" = "both_exist" ]; then
 WARNING: Both .walnut/ and .alive/ exist in this world. This needs manual resolution -- invoke the migration skill to handle it."
 fi
 
+# Detect v2 patterns that need v3 upgrade
+UPGRADE_NEEDED=""
+if [ -n "$WORLD_ROOT" ]; then
+  # Check for v2 indicators
+  if [ -d "$WORLD_ROOT/02_Life/_kernel" ] 2>/dev/null || \
+     find "$WORLD_ROOT" -maxdepth 4 -name "tasks.md" -path "*/_kernel/tasks.md" -print -quit 2>/dev/null | grep -q . || \
+     find "$WORLD_ROOT" -maxdepth 4 -type d -name "_generated" -path "*/_kernel/_generated" -print -quit 2>/dev/null | grep -q . || \
+     find "$WORLD_ROOT" -maxdepth 3 -type d -name "bundles" -print -quit 2>/dev/null | grep -q . || \
+     [ -d "$WORLD_ROOT/People" ] 2>/dev/null || \
+     [ -d "$WORLD_ROOT/03_Inputs" ] 2>/dev/null; then
+    UPGRADE_NEEDED="
+UPGRADE REQUIRED: This world has v2 structure (bundles/ folders, _kernel/_generated/, tasks.md, or legacy domain names). Run /alive:system-upgrade to migrate to v3. The system will work but performance and features are degraded until you upgrade."
+  fi
+fi
+
 # Build session message with rule verification
 SESSION_MSG="ALIVE Context System session initialized. Session ID: $SESSION_ID
 World: $WORLD_ROOT
 Walnut: none detected
 Model: $HOOK_MODEL
 $PREFS
-Rules: ${RULE_COUNT} loaded (${RULE_NAMES})${MIGRATION_MSG}"
+Rules: ${RULE_COUNT} loaded (${RULE_NAMES})${MIGRATION_MSG}${UPGRADE_NEEDED}"
 
 # Escape and combine -- world key + index + bundle awareness + tidy nudge + rules
 WORLD_KEY_ESCAPED=$(escape_for_json "$WORLD_KEY_CONTENT")
