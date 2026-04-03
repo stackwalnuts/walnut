@@ -29,7 +29,7 @@ Or from the Claude Code UI: `/plugins` → add marketplace `alivecontext/alive` 
 
 ---
 
-<p align="center"><img src="assets/hero-demo.gif" alt="ALIVE session demo" width="700"></p>
+<p align="center"><img src="assets/hero-v3.gif" alt="ALIVE session demo" width="700"></p>
 
 ## How It Works
 
