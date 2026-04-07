@@ -2563,10 +2563,13 @@ def migrate_v2_layout(staging_dir):
     bundles_container = os.path.join(staging_dir, "bundles")
 
     has_generated = os.path.isdir(generated_dir)
-    has_bundles = os.path.isdir(bundles_container) and any(
-        os.path.isdir(os.path.join(bundles_container, name))
-        for name in os.listdir(bundles_container)
-    ) if os.path.isdir(bundles_container) else False
+    if os.path.isdir(bundles_container):
+        has_bundles = any(
+            os.path.isdir(os.path.join(bundles_container, name))
+            for name in os.listdir(bundles_container)
+        )
+    else:
+        has_bundles = False
 
     # Idempotency short-circuit: already v3 shape.
     if not has_generated and not has_bundles:
