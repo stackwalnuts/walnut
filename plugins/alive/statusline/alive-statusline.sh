@@ -3,7 +3,7 @@
 # Boot message on first render, then working statusline after first response.
 # Cross-platform: Mac, Linux, Windows (Git Bash). No python3 dependency.
 
-INPUT=$(cat /dev/stdin 2>/dev/null || echo '{}')
+INPUT=$(cat 2>/dev/null || echo '{}')
 
 # ── Platform detection ──
 ALIVE_PLATFORM="unix"

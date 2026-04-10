@@ -105,7 +105,7 @@ The squirrel is the agent runtime — rules, hooks, skills, and policies that an
 │                                                  │
 │  ┌───────────┐   ┌───────────┐   ┌───────────┐  │
 │  │   Rules   │   │   Skills  │   │   Hooks   │  │
-│  │ 6 files   │   │ 15 skills │   │ 14 hooks  │  │
+│  │ 6 files   │   │ 15 skills │   │ 13 hooks  │  │
 │  └───────────┘   └───────────┘   └───────────┘  │
 │                                                  │
 │  ┌─────────────────────────────────────────────┐ │
@@ -183,7 +183,7 @@ claude plugin install alive@alivecontext
 
 Requires [Claude Code](https://docs.anthropic.com/en/docs/claude-code) + Python 3. Works on macOS, Linux, Windows (WSL).
 
-15 skills, 14 hooks, 6 rule files, templates, and a statusline.
+15 skills, 13 hooks, 6 rule files, templates, and a statusline.
 
 ### Skills
 

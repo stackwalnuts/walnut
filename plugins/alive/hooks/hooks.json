@@ -1,5 +1,5 @@
 {
-  "description": "ALIVE Context System v2 — 14 hooks. Session hooks read/write .alive/_squirrels/. All read stdin JSON for session_id.",
+  "description": "ALIVE Context System v3 — 13 hooks. Session hooks read/write .alive/_squirrels/. All read stdin JSON for session_id.",
   "hooks": {
     "SessionStart": [
       {
