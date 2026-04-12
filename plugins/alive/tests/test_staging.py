@@ -608,6 +608,122 @@ class StageFilesDispatcherTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Auto-injected README.md (Ben's PR #32 ask)
+# ---------------------------------------------------------------------------
+
+
+class PackageReadmeInjectionTests(unittest.TestCase):
+    """``_stage_files`` writes an auto-generated README.md at the package root.
+
+    The README is recipient-facing format context for non-ALIVE users who
+    unpack a .walnut tar. It overwrites any existing README.md from the
+    source walnut's live context (the source walnut on disk is unaffected).
+    """
+
+    def _read_staged_readme(self, staging):
+        # type: (str) -> str
+        with open(os.path.join(staging, "README.md"), "r", encoding="utf-8") as f:
+            return f.read()
+
+    def test_readme_present_in_full_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            walnut = os.path.join(tmp, "nova-station")
+            _make_kernel(walnut, name="nova-station")
+            _make_bundle_v3(walnut, "shielding-review")
+            with _patch_env():
+                staging = ap2p._stage_files(walnut, "full")
+            try:
+                content = self._read_staged_readme(staging)
+                self.assertIn("# nova-station", content)
+                self.assertIn("ALIVE Context System", content)
+                self.assertIn("/alive:receive", content)
+                self.assertIn("`shielding-review/`", content)
+            finally:
+                import shutil
+                shutil.rmtree(staging, ignore_errors=True)
+
+    def test_readme_present_in_bundle_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            walnut = os.path.join(tmp, "nova-station")
+            _make_kernel(walnut, name="nova-station")
+            _make_bundle_v3(walnut, "shielding-review")
+            _make_bundle_v3(walnut, "launch-checklist")
+            with _patch_env():
+                staging = ap2p._stage_files(
+                    walnut, "bundle", bundle_names=["shielding-review"]
+                )
+            try:
+                content = self._read_staged_readme(staging)
+                self.assertIn("# nova-station", content)
+                self.assertIn("`shielding-review/`", content)
+                # Bundle-scope only includes the requested bundle
+                self.assertNotIn("`launch-checklist/`", content)
+            finally:
+                import shutil
+                shutil.rmtree(staging, ignore_errors=True)
+
+    def test_readme_present_in_snapshot_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            walnut = os.path.join(tmp, "nova-station")
+            _make_kernel(walnut, name="nova-station")
+            with _patch_env():
+                staging = ap2p._stage_files(walnut, "snapshot")
+            try:
+                content = self._read_staged_readme(staging)
+                self.assertIn("# nova-station", content)
+                self.assertIn("ALIVE Context System", content)
+            finally:
+                import shutil
+                shutil.rmtree(staging, ignore_errors=True)
+
+    def test_readme_overwrites_existing_in_walnut_root(self):
+        """An existing README.md from live context is replaced in the package."""
+        with tempfile.TemporaryDirectory() as tmp:
+            walnut = os.path.join(tmp, "nova-station")
+            _make_kernel(walnut, name="nova-station")
+            _make_bundle_v3(walnut, "shielding-review")
+            # Walnut author wrote their own README — package should overwrite it
+            _write(
+                os.path.join(walnut, "README.md"),
+                "# my hand-written walnut README\n\nNot the package primer.\n",
+            )
+            with _patch_env():
+                staging = ap2p._stage_files(walnut, "full")
+            try:
+                content = self._read_staged_readme(staging)
+                self.assertNotIn("hand-written walnut README", content)
+                self.assertIn("ALIVE Context System", content)
+                # Source walnut on disk is untouched
+                with open(
+                    os.path.join(walnut, "README.md"), "r", encoding="utf-8"
+                ) as f:
+                    src_content = f.read()
+                self.assertIn("hand-written walnut README", src_content)
+            finally:
+                import shutil
+                shutil.rmtree(staging, ignore_errors=True)
+
+    def test_readme_render_no_bundles(self):
+        """``render_package_readme`` produces a stable string when bundles are empty."""
+        out = ap2p.render_package_readme("nova-station", bundle_names=None)
+        self.assertIn("# nova-station", out)
+        self.assertIn("Bundle folders — units of work", out)
+        # No bullet sub-list when there are no bundles
+        self.assertNotIn("  - `", out)
+
+    def test_readme_render_sorts_bundles(self):
+        """``render_package_readme`` sorts bundles alphabetically for stability."""
+        out = ap2p.render_package_readme(
+            "nova-station", bundle_names=["zeta", "alpha", "mu"]
+        )
+        alpha_idx = out.index("`alpha/`")
+        mu_idx = out.index("`mu/`")
+        zeta_idx = out.index("`zeta/`")
+        self.assertLess(alpha_idx, mu_idx)
+        self.assertLess(mu_idx, zeta_idx)
+
+
+# ---------------------------------------------------------------------------
 # _should_exclude_package helper
 # ---------------------------------------------------------------------------
 

@@ -1047,6 +1047,36 @@ reason: Default share exclusion
 (stubbed)
 """
 
+# Auto-injected at the package root by _stage_files (Ben's PR #32 ask).
+# Recipient-facing format primer: explains what a .walnut package is to a
+# non-ALIVE user who unpacks it. Walnut narrative belongs in `_kernel/key.md`
+# per ALIVE convention; this README is metadata, not author content. Any
+# README.md from the source walnut's live context is overwritten in the
+# package output (the source walnut is untouched).
+STUB_PACKAGE_README_MD = """\
+# {walnut_name}
+
+This is a context package from the ALIVE Context System (Personal Context Manager).
+
+## What's inside
+
+- `_kernel/key.md` — what this is about
+- `_kernel/log.md` — decision history
+- `_kernel/insights.md` — standing knowledge
+- Bundle folders — units of work with source material{bundle_list}
+
+## Reading it
+
+Everything is plaintext markdown and JSON. Open in any editor.
+
+## Using it with ALIVE
+
+Install: `claude plugin install alive@alivecontext`
+Import: `/alive:receive` → point to this folder
+
+Learn more: https://github.com/alivecontext/alive
+"""
+
 
 # ---------------------------------------------------------------------------
 # Mockable environment helpers (LD9)
@@ -1097,6 +1127,32 @@ def render_stub_insights(walnut_name):
     return STUB_INSIGHTS_MD.format(
         walnut_name=walnut_name,
         iso_timestamp=now_utc_iso(),
+    )
+
+
+def render_package_readme(walnut_name, bundle_names=None):
+    # type: (str, Optional[List[str]]) -> str
+    """Render ``STUB_PACKAGE_README_MD`` for the package root.
+
+    Per Ben's PR #32 suggestion: makes the .walnut self-documenting for
+    non-ALIVE recipients. Walnut narrative belongs in ``_kernel/key.md``;
+    this README is recipient-facing format context only. Any existing
+    README.md from the source walnut's live context is overwritten in the
+    package output.
+
+    When ``bundle_names`` is provided and non-empty, the bundles are
+    enumerated as a sub-list under "Bundle folders" (sorted, backtick-quoted).
+    Empty / None leaves the line as a generic placeholder.
+    """
+    if bundle_names:
+        bundle_list = "\n" + "\n".join(
+            "  - `{0}/`".format(name) for name in sorted(bundle_names)
+        )
+    else:
+        bundle_list = ""
+    return STUB_PACKAGE_README_MD.format(
+        walnut_name=walnut_name,
+        bundle_list=bundle_list,
     )
 
 
@@ -1182,6 +1238,27 @@ def _walnut_name(walnut_path):
     level of detail belongs in the manifest generator (task .5).
     """
     return os.path.basename(os.path.abspath(walnut_path.rstrip(os.sep)))
+
+
+def _discover_staged_bundles(staging_dir):
+    # type: (str) -> List[str]
+    """Return the list of bundle names present at the staging root.
+
+    A bundle is a top-level directory at ``staging_dir`` that contains a
+    ``context.manifest.yaml`` file. Used by ``render_package_readme`` to
+    enumerate bundles in the auto-generated README. The result is the natural
+    listdir order; the renderer sorts.
+    """
+    if not os.path.isdir(staging_dir):
+        return []
+    bundles = []  # type: List[str]
+    for item in os.listdir(staging_dir):
+        path = os.path.join(staging_dir, item)
+        if not os.path.isdir(path):
+            continue
+        if os.path.isfile(os.path.join(path, "context.manifest.yaml")):
+            bundles.append(item)
+    return bundles
 
 
 def _copy_kernel_optional(walnut_path, staging, fname):
@@ -1600,6 +1677,19 @@ def _stage_files(
             _stage_bundle(walnut_path, staging_dir, bundle_names, warnings)
         else:  # snapshot
             _stage_snapshot(walnut_path, staging_dir, warnings)
+
+        # Inject the auto-generated README.md at the package root (Ben's PR
+        # #32 ask). Overwrites any existing README.md from the source walnut's
+        # live context; walnut narrative belongs in `_kernel/key.md` per ALIVE
+        # convention. The source walnut on disk is unaffected -- only the
+        # package output is rewritten.
+        _write_text(
+            os.path.join(staging_dir, "README.md"),
+            render_package_readme(
+                _walnut_name(walnut_path),
+                _discover_staged_bundles(staging_dir),
+            ),
+        )
     except Exception:
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise

@@ -56,6 +56,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 DEFAULT_IGNORE_PATHS = (
     "_kernel/now.json",
     "_kernel/imports.json",
+    # README.md at the walnut root is auto-injected by _stage_files at
+    # package time (Ben's PR #32) -- it's a packaging artifact, not source
+    # content, so round-trip comparators should not enforce byte equality.
+    "README.md",
 )
 
 DEFAULT_IGNORE_PATH_PREFIXES = (
