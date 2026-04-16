@@ -250,6 +250,16 @@ def scan_bundles(walnut: str) -> Dict[str, Dict[str, Any]]:
     ``_kernel/``, ``raw/``, ``.git``, hidden dirs, ``node_modules``, and
     directories inside nested walnuts. Malformed manifests are dropped from
     the result with a ``MalformedYAMLWarning``.
+
+    NOTE: upstream ``project.py::scan_bundles`` has a dormant bug where
+    the nested-walnut boundary check (`"_kernel" in dirs`) never fires
+    because ``_kernel`` is pruned from ``dirs`` by the earlier
+    ``skip_dirs`` pass. This extracted version fixes that by checking for
+    the ``_kernel/key.md`` sentinel on disk directly, matching the pattern
+    ``walnut_paths.find_bundles`` already uses. The observable effect: a
+    walnut that contains a nested walnut (e.g. ``04_Ventures/parent/
+    sub-venture/_kernel/key.md``) no longer bleeds its child's bundles
+    into the parent's result.
     """
     bundles: Dict[str, Dict[str, Any]] = {}
     skip_dirs = {"_kernel", "raw", ".git", "node_modules", "__pycache__",
@@ -272,7 +282,10 @@ def scan_bundles(walnut: str) -> Dict[str, Dict[str, Any]]:
         if inside_nested:
             continue
 
-        if rel != "." and "_kernel" in dirs:
+        # Nested walnut detection: check the filesystem directly rather
+        # than relying on ``_kernel`` in ``dirs`` (which has already been
+        # pruned above). Bypasses the upstream dead-code issue.
+        if rel != ".":
             kernel_key = os.path.join(root, "_kernel", "key.md")
             if os.path.isfile(kernel_key):
                 nested_walnut_roots.add(rel)
@@ -575,25 +588,30 @@ def scan_nested_walnuts(walnut: str) -> Dict[str, Dict[str, Any]]:
             os.path.join(entry_path, "_kernel", "now.json"),
             os.path.join(entry_path, "_kernel", "_generated", "now.json"),
         ]:
-            if os.path.isfile(now_path):
-                try:
-                    with open(now_path, "r", encoding="utf-8") as f:
-                        now_data = json.load(f)
-                except (IOError, OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-                    warnings.warn(
-                        "cannot read {}: {}".format(now_path, exc),
-                        MalformedYAMLWarning,
-                        stacklevel=2,
-                    )
-                    break
-                child_info["phase"] = now_data.get("phase", "unknown")
-                next_val = now_data.get("next")
-                if isinstance(next_val, dict):
-                    child_info["next"] = next_val.get("action")
-                elif isinstance(next_val, str):
-                    child_info["next"] = next_val
-                child_info["updated"] = now_data.get("updated")
-                break
+            if not os.path.isfile(now_path):
+                continue
+            try:
+                with open(now_path, "r", encoding="utf-8") as f:
+                    now_data = json.load(f)
+            except (IOError, OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                # Malformed/unreadable projection at this candidate path --
+                # warn and try the next candidate. Only ``break`` after a
+                # successful parse, so a corrupted v3 ``now.json`` doesn't
+                # mask a valid v2 ``_generated/now.json`` (the fallback).
+                warnings.warn(
+                    "cannot read {}: {}".format(now_path, exc),
+                    MalformedYAMLWarning,
+                    stacklevel=2,
+                )
+                continue
+            child_info["phase"] = now_data.get("phase", "unknown")
+            next_val = now_data.get("next")
+            if isinstance(next_val, dict):
+                child_info["next"] = next_val.get("action")
+            elif isinstance(next_val, str):
+                child_info["next"] = next_val
+            child_info["updated"] = now_data.get("updated")
+            break
 
         children[entry] = child_info
 

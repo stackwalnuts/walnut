@@ -371,5 +371,119 @@ class VendorHelpersWorkAgainstTinyFixture(unittest.TestCase):
         self.assertIn("summary", summary["bundles"])
 
 
+class ScanBundlesHonorsNestedWalnutBoundaries(unittest.TestCase):
+    """Regression: ``scan_bundles`` must treat nested walnuts as boundaries.
+
+    The upstream ``project.py::scan_bundles`` has a latent dead-code bug --
+    its ``"_kernel" in dirs`` check can never fire because ``_kernel`` is
+    pruned from ``dirs`` earlier in the loop. That means a parent walnut's
+    scan bleeds into a child walnut's bundles. The extracted version in
+    ``project_pure`` fixes this by checking ``_kernel/key.md`` on disk.
+    """
+
+    def test_nested_walnut_bundles_are_not_harvested_by_parent(self) -> None:
+        import tempfile
+
+        from alive_mcp._vendor._pure import project_pure
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            parent = pathlib.Path(tmpdir) / "parent-walnut"
+            parent_kernel = parent / "_kernel"
+            parent_kernel.mkdir(parents=True)
+            (parent_kernel / "key.md").write_text("---\ntype: venture\n---\n")
+
+            # Parent has its own bundle directly.
+            parent_bundle = parent / "parent-bundle"
+            parent_bundle.mkdir()
+            (parent_bundle / "context.manifest.yaml").write_text(
+                "goal: parent's bundle\nstatus: draft\n"
+            )
+
+            # Nested walnut lives inside the parent, with its own bundle.
+            child = parent / "child-walnut"
+            child_kernel = child / "_kernel"
+            child_kernel.mkdir(parents=True)
+            (child_kernel / "key.md").write_text("---\ntype: project\n---\n")
+            child_bundle = child / "child-bundle"
+            child_bundle.mkdir()
+            (child_bundle / "context.manifest.yaml").write_text(
+                "goal: child's bundle\nstatus: draft\n"
+            )
+
+            result = project_pure.scan_bundles(str(parent))
+
+            # Parent bundle MUST be harvested.
+            self.assertIn("parent-bundle", result)
+            # Child walnut's bundles MUST NOT bleed in under any path form.
+            bad_keys = [
+                k for k in result
+                if "child-walnut" in k or k.startswith("child-walnut")
+            ]
+            self.assertEqual(
+                bad_keys, [],
+                msg="child walnut's bundles leaked into parent scan: {!r}".format(
+                    list(result.keys())
+                ),
+            )
+
+
+class ScanNestedWalnutsFallsBackOnMalformedV3Projection(unittest.TestCase):
+    """Regression: a malformed v3 ``now.json`` must NOT mask a valid v2 fallback.
+
+    Upstream ``project.py::scan_nested_walnuts`` tries v3 then v2; on read
+    failure at the first candidate it falls through to the next iteration
+    of the loop. The extracted version preserves that -- on exception we
+    ``continue``, not ``break``.
+    """
+
+    def test_v2_fallback_used_when_v3_is_malformed(self) -> None:
+        import tempfile
+        import warnings as warnings_mod
+
+        from alive_mcp._vendor._pure import MalformedYAMLWarning, project_pure
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            parent = pathlib.Path(tmpdir) / "parent"
+            parent.mkdir()
+
+            child = parent / "child"
+            child_kernel = child / "_kernel"
+            child_kernel.mkdir(parents=True)
+            (child_kernel / "key.md").write_text("---\ntype: project\n---\n")
+
+            # v3 projection is malformed.
+            (child_kernel / "now.json").write_text("{ not valid json")
+
+            # v2 projection is valid.
+            v2_gen = child_kernel / "_generated"
+            v2_gen.mkdir()
+            (v2_gen / "now.json").write_text(
+                '{"phase": "shipping", "next": "ship it", "updated": "2026-04-16"}'
+            )
+
+            with warnings_mod.catch_warnings(record=True) as caught:
+                warnings_mod.simplefilter("always")
+                children = project_pure.scan_nested_walnuts(str(parent))
+
+            self.assertIn("child", children)
+            self.assertEqual(
+                children["child"]["phase"], "shipping",
+                msg="v2 fallback not used after malformed v3: {!r}".format(
+                    children["child"]
+                ),
+            )
+            self.assertEqual(children["child"]["next"], "ship it")
+            self.assertEqual(children["child"]["updated"], "2026-04-16")
+
+            # A MalformedYAMLWarning must have been emitted for the v3 path.
+            self.assertTrue(
+                any(
+                    issubclass(w.category, MalformedYAMLWarning)
+                    for w in caught
+                ),
+                msg="no MalformedYAMLWarning emitted for bad v3 now.json",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
