@@ -35,23 +35,25 @@
 # pointer from silently rewriting goldens against their personal
 # data — a subtle footgun the first review round flagged.
 #
-# T14 → T15 transition (dependency pinning)
-# ----------------------------------------
-# T14 pins the Inspector version INLINE via the
-# ``INSPECTOR_VERSION`` constant below — ``npx -y
-# @modelcontextprotocol/inspector@<INSPECTOR_VERSION>`` — so an upstream
-# Inspector release cannot spontaneously break the snapshot diff. The
-# cost of inline pinning is that the first run on a cold machine still
-# touches the npm registry to fetch that version into the npx cache;
-# that is acceptable for LOCAL dev.
+# Dependency pinning (T14 + T15)
+# ------------------------------
+# Inspector is pinned via a committed ``package.json`` +
+# ``package-lock.json`` under ``alive-mcp/`` and installed locally
+# into ``alive-mcp/node_modules/`` via ``npm ci``. The script prefers
+# the local binary at ``./node_modules/.bin/mcp-inspector`` so CI's
+# no-phone-home test phase (T15) never touches the network — the
+# Inspector is already on disk from the install phase.
 #
-# For CI, T15 replaces this dynamic-fetch path with a committed
-# ``package-lock.json`` + ``npm ci`` install phase and swaps the
-# invocation to ``./node_modules/.bin/mcp-inspector`` — the
-# no-phone-home posture in T15 forbids any network access during the
-# test phase. To bump Inspector: update ``INSPECTOR_VERSION`` here,
-# update T15's ``package-lock.json`` to match, then
-# ``scripts/update-snapshots.sh`` to regenerate the goldens.
+# Legacy fallback: if ``./node_modules/.bin/mcp-inspector`` is absent
+# (e.g. a contributor running the script before ``npm ci``), the
+# script falls back to ``npx -y @modelcontextprotocol/inspector@<ver>``
+# where ``<ver>`` is the ``INSPECTOR_VERSION`` constant below. That
+# fallback hits the npm registry and is FORBIDDEN in CI — the test
+# phase's empty harden-runner allowlist blocks it. To bump Inspector:
+# update ``INSPECTOR_VERSION`` here, update the package.json dep
+# range, regenerate ``package-lock.json`` via ``npm install
+# --package-lock-only``, then run ``scripts/update-snapshots.sh`` to
+# regenerate the goldens.
 #
 # Exit codes
 # ----------
@@ -111,7 +113,10 @@ esac
 # npx / uv / node surface their own errors deep in a pipeline. ``node``
 # is included because ``npx`` fails with a confusing "spawn EACCES" or
 # "bad interpreter" error when Node is missing — a dedicated check up
-# front produces a clearer diagnostic.
+# front produces a clearer diagnostic. ``npx`` is only required on the
+# legacy dynamic-fetch fallback path; we still check for it here so
+# the error message appears up front rather than mid-pipeline for the
+# rare contributor running without ``npm ci`` yet.
 for bin in bash npx node uv python3; do
     if ! command -v "${bin}" >/dev/null 2>&1; then
         echo "error: ${bin} is required on PATH to run the Inspector snapshot generator" >&2
@@ -161,10 +166,32 @@ fi
 # Ensure tempfile cleanup on any exit path (success or abort).
 trap 'rm -f "${STDERR_LOG}"' EXIT
 
+# Prefer the locally-installed Inspector binary (restored by
+# ``npm ci`` during CI's install phase) over a dynamic ``npx`` fetch.
+# When the local install is present we NEVER touch the network — the
+# T15 no-phone-home CI posture depends on this. The ``npx`` fallback
+# only fires on a dev machine that has not yet run ``npm ci``; that
+# path hits the npm registry and is blocked by the CI egress policy.
+LOCAL_INSPECTOR="${PKG_ROOT}/node_modules/.bin/mcp-inspector"
+if [[ -x "${LOCAL_INSPECTOR}" ]]; then
+    INSPECTOR_CMD=("${LOCAL_INSPECTOR}")
+else
+    # Guard against running in CI without node_modules restored. If
+    # CI is set and the local binary is missing, the install phase
+    # broke — fail loud rather than silently hitting the registry
+    # (which harden-runner will block anyway, producing a much more
+    # confusing error).
+    if [[ "${CI:-}" =~ ^(1|true|True|TRUE|yes|on)$ ]]; then
+        echo "error: ${LOCAL_INSPECTOR} not found in CI; did the npm ci step run?" >&2
+        exit 1
+    fi
+    INSPECTOR_CMD=(npx -y "@modelcontextprotocol/inspector@${INSPECTOR_VERSION}")
+fi
+
 if ! RAW_JSON="$(
     cd "${PKG_ROOT}" \
     && ALIVE_WORLD_ROOT="${WORLD_ROOT}" \
-       npx -y "@modelcontextprotocol/inspector@${INSPECTOR_VERSION}" \
+       "${INSPECTOR_CMD[@]}" \
            --cli uv run alive-mcp \
            --method "${METHOD}" 2>"${STDERR_LOG}"
 )"; then

@@ -13,6 +13,11 @@ __pycache__/
 venv/
 env/
 
+# Node deps (pinned via package.json + package-lock.json; CI restores via npm ci)
+# package-lock.json IS committed — it's the pin that makes CI reproducible.
+# node_modules/ is NEVER committed — regenerated locally and in CI.
+node_modules/
+
 # uv cache / ephemeral state (uv.lock IS committed — it's the dev pin)
 .uv/
 
