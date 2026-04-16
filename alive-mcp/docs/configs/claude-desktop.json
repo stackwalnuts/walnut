@@ -1,5 +1,4 @@
 {
-  "_comment": "Claude Desktop config. Lives at ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%\\Claude\\claude_desktop_config.json (Windows). Restart Claude Desktop after editing. Replace ALIVE_WORLD_ROOT with the absolute path to your World (the directory containing .alive/).",
   "mcpServers": {
     "alive": {
       "command": "uvx",

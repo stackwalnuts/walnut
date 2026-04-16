@@ -134,9 +134,9 @@ was rejected.
 "No solution found when resolving tool dependencies: requires
 Python >=3.10,<3.14, your system is 3.14.0".
 
-**Cause.** alive-mcp v0.1 pins `>=3.10,<3.14`. The upper cap excludes
-Python 3.14 until the upstream `mcp` SDK ships validated CI against it.
-Python 3.10, 3.11, 3.12, and 3.13 are all supported.
+**Cause.** alive-mcp v0.1 pins `>=3.10,<3.14`. Python 3.10, 3.11,
+3.12, and 3.13 are all supported. The upper cap excludes Python 3.14
+until the upstream `mcp` SDK ships validated CI against it.
 
 **Fix.** Point `uv` at a pinned 3.12 interpreter:
 

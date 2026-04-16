@@ -1,5 +1,4 @@
 {
-  "_comment": "Gemini CLI config. Lives at ~/.gemini/settings.json (global) or <project>/.gemini/settings.json (project). Run `gemini mcp list` to verify after editing. Replace ALIVE_WORLD_ROOT with the absolute path to your World (the directory containing .alive/).",
   "mcpServers": {
     "alive": {
       "command": "uvx",

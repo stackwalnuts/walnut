@@ -50,13 +50,26 @@ Use this when your environment cannot run `uv` (locked-down corporate
 machines, for example). You are responsible for pinning Python and
 isolating the install; `uvx` handles both automatically.
 
+### uvx from git (advanced)
+
+Pin to a specific commit or tag (useful for testing a PR or pre-release):
+
+```bash
+uvx --from git+https://github.com/alivecontext/alive.git@v0.1.0#subdirectory=claude-code/alive-mcp alive-mcp
+```
+
+Drop `@v0.1.0` for `main`, or substitute a branch / commit SHA. The
+`subdirectory=` qualifier is required because alive-mcp lives inside
+the `alivecontext/alive` monorepo at `claude-code/alive-mcp/`.
+
 ---
 
 ## Configure
 
 One config per client. Every snippet pins `alive-mcp@0.1.0` to prevent
 silent upgrades, and every snippet expects an absolute path in
-`ALIVE_WORLD_ROOT`.
+`ALIVE_WORLD_ROOT` (primary env var; `ALIVE_WORLD_PATH` is accepted as
+a forward-compat alias, `ALIVE_WORLD_ROOT` wins if both are set).
 
 | Client         | Config file                                                      | Snippet                               |
 | -------------- | ---------------------------------------------------------------- | ------------------------------------- |
@@ -90,8 +103,20 @@ Set `ALIVE_WORLD_ROOT` in your client config. Every snippet in
 
 Exactly ten tools, frozen for v0.1. Every tool is annotated
 `readOnlyHint: true, openWorldHint: false, destructiveHint: false, idempotentHint: true`.
-Every tool returns a structured envelope (see
-[`docs/error-codes.md`](docs/error-codes.md) for the error taxonomy).
+Every tool returns an MCP `CallToolResult` envelope of the form:
+
+```json
+{
+  "content": [{"type": "text", "text": "<JSON of structuredContent>"}],
+  "structuredContent": { /* ... see per-tool examples below ... */ },
+  "isError": false
+}
+```
+
+The **example responses below show `structuredContent` only**. The
+outer `content` / `isError` wrapper is always present and follows the
+spec. On error, `isError: true` and `structuredContent` carries
+`{error, message, suggestions}` per [`docs/error-codes.md`](docs/error-codes.md).
 
 The reference below is generated from the committed contract snapshot
 at `tests/fixtures/contracts/tools.snapshot.json`; any drift is caught
@@ -296,6 +321,25 @@ World root.
 - `cursor: str | null = null`
 - `case_sensitive: bool = false`
 
+**Example response**
+
+```json
+{
+  "matches": [
+    {
+      "walnut": "04_Ventures/nova-station",
+      "file": "_kernel/key.md",
+      "line_number": 7,
+      "content": "goal: first orbital tourism flight by 2030",
+      "context_before": "type: venture",
+      "context_after": "rhythm: weekly"
+    }
+  ],
+  "next_cursor": null,
+  "skipped": []
+}
+```
+
 ### `read_log`
 
 Paginated read of a walnut's log with chapter-aware spanning. Unit is
@@ -473,9 +517,11 @@ steps, is at [`docs/troubleshooting.md`](docs/troubleshooting.md).
 3. **`ERR_NO_WORLD`** - set `ALIVE_WORLD_ROOT` in the client config to
    the absolute path of your World root (the directory containing
    `.alive/`).
-4. **Python 3.14 rejected** - alive-mcp pins `>=3.10,<3.14`. Install
-   a pinned interpreter with `uv python install 3.12` and pass
-   `--python 3.12` in the spawn args.
+4. **Python version mismatch** - alive-mcp pins `>=3.10,<3.14`. Python
+   3.10, 3.11, 3.12, and 3.13 all work; 3.14 is excluded until the
+   upstream `mcp` SDK ships validated CI against it. If your system
+   Python is outside this range, install a pinned interpreter with
+   `uv python install 3.12` and pass `--python 3.12` in the spawn args.
 5. **`ERR_PATH_ESCAPE`** - never construct walnut paths manually. Use
    the `path` field returned by `list_walnuts` verbatim.
 
@@ -484,13 +530,17 @@ steps, is at [`docs/troubleshooting.md`](docs/troubleshooting.md).
 ## Contributing
 
 alive-mcp lives as a sibling package in the
-[`alivecontext/alive`](https://github.com/alivecontext/alive) monorepo
-at `claude-code/alive-mcp/`. The repo's system Python is 3.14 for other
-plugin work; alive-mcp contributors use a pinned 3.12 interpreter so
-the v0.1 pin is enforced locally:
+[`alivecontext/alive`](https://github.com/alivecontext/alive) monorepo.
+Mainline path: `claude-code/alive-mcp/`. If you clone a release
+worktree (e.g. `.worktrees/alive-mcp-v0.1/alive-mcp/`) the commands
+below work identically - they are all relative to the package root.
+
+The monorepo's system Python is 3.14 for other plugin work; alive-mcp
+contributors use a pinned 3.12 interpreter so the v0.1 pin is enforced
+locally:
 
 ```bash
-cd claude-code/alive-mcp
+cd claude-code/alive-mcp           # or .worktrees/<branch>/alive-mcp
 uv python install 3.12
 uv venv --python 3.12
 uv sync
@@ -510,10 +560,15 @@ Contract snapshots at `tests/fixtures/contracts/` are the single source
 of truth for the tool / resource / error surface; update them with
 `scripts/update-snapshots.sh` when intentionally changing the surface.
 
-Full design lives at `.flow/specs/fn-10-60k.md` in the monorepo root.
-The strategic context (why MCP matters for ALIVE distribution) is in
-the competitor-mempalace bundle and the Moat C thesis - see
-`.flow/specs/fn-10-60k.md` → References.
+## References
+
+- Full design: `.flow/specs/fn-10-60k.md` in the monorepo root.
+- Research bundle: `alive-mcp-research/` - protocol decisions, client
+  capability matrix, SDK evaluation, consent and security patterns.
+- Strategic context (why MCP matters for ALIVE distribution):
+  `competitor-mempalace/competitor-mempalace-draft-01.md` - the Moat C
+  thesis. MCP is the distribution channel the category is picking;
+  without an MCP server, ALIVE is invisible to adjacent agents.
 
 ## License
 

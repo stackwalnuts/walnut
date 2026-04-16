@@ -1,5 +1,4 @@
 {
-  "_comment": "Cursor config. Lives at <project>/.cursor/mcp.json (project scope) or ~/.cursor/mcp.json (global). Cursor auto-reloads on file change. Replace ALIVE_WORLD_ROOT with the absolute path to your World (the directory containing .alive/).",
   "mcpServers": {
     "alive": {
       "command": "uvx",
