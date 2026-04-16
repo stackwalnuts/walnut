@@ -596,6 +596,41 @@ def _suggest_walnut_paths(
     return get_close_matches(missing, walnuts, n=max_suggestions, cutoff=0.4)
 
 
+def _walnut_not_found_envelope(world_root: str, missing: str) -> dict[str, Any]:
+    """Build the ERR_WALNUT_NOT_FOUND envelope with fuzzy suggestions.
+
+    Centralized so both ``get_walnut_state`` and ``read_walnut_kernel``
+    (and T7 bundle tools when they surface the same error) share the
+    same behavior: if fuzzy near-matches are found, they are PREPENDED
+    to the static codebook guidance so clients see the most actionable
+    hint first; if none are found, the static codebook list stands on
+    its own. Near-misses are also logged at INFO so the audit trail
+    (T12) captures them independent of what the client sees.
+    """
+    near = _suggest_walnut_paths(world_root, missing)
+    if near:
+        logger.info(
+            "walnut not found: %r; near-misses: %r", missing, near
+        )
+        codebook = list(errors.SUGGESTIONS.get(errors.ERR_WALNUT_NOT_FOUND, ()))
+        # Prepend a heading suggestion that introduces the fuzzy
+        # matches so callers know they are suggestions, not
+        # authoritative matches. Downstream clients can scan for the
+        # leading "Did you mean" prefix if they want to split heuristic
+        # from canonical guidance.
+        combined = (
+            ["Did you mean one of these walnut paths? {}".format(", ".join(near))]
+            + codebook
+        )
+        return envelope.error(
+            errors.ERR_WALNUT_NOT_FOUND,
+            walnut=missing,
+            suggestions=combined,
+        )
+    # No near-misses -- use the static codebook list.
+    return envelope.error(errors.ERR_WALNUT_NOT_FOUND, walnut=missing)
+
+
 # ---------------------------------------------------------------------------
 # App-context accessor. Tools run inside FastMCP's request-context, which
 # threads the lifespan ``AppContext`` through ``ctx.request_context``.
@@ -743,23 +778,7 @@ async def get_walnut_state(
     except errors.PathEscapeError:
         return envelope.error(errors.ERR_PATH_ESCAPE)
     except errors.WalnutNotFoundError:
-        suggestions = _suggest_walnut_paths(world_root, walnut)
-        # The codebook template fills ``{walnut}``; suggestions come
-        # from the spec-level suggestions list. We can't inject fuzzy
-        # matches into the spec's static list without re-plumbing
-        # envelope.error, but the base suggestions already steer
-        # callers to ``list_walnuts``. Log the near-misses so the
-        # audit trail captures them (T12 surfaces).
-        if suggestions:
-            logger.info(
-                "walnut not found: %r; near-misses: %r",
-                walnut,
-                suggestions,
-            )
-        return envelope.error(
-            errors.ERR_WALNUT_NOT_FOUND,
-            walnut=walnut,
-        )
+        return _walnut_not_found_envelope(world_root, walnut)
 
     now_path = _resolve_now_path(walnut_abs)
     if now_path is None:
@@ -846,10 +865,7 @@ async def read_walnut_kernel(
     except errors.PathEscapeError:
         return envelope.error(errors.ERR_PATH_ESCAPE)
     except errors.WalnutNotFoundError:
-        return envelope.error(
-            errors.ERR_WALNUT_NOT_FOUND,
-            walnut=walnut,
-        )
+        return _walnut_not_found_envelope(world_root, walnut)
 
     # Resolve the on-disk path by file stem.
     if file == "now":

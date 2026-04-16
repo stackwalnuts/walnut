@@ -290,7 +290,12 @@ def _normalize_code(
     return "UNKNOWN", None
 
 
-def error(code: errors.CodeLike, **template_kwargs: Any) -> dict[str, Any]:
+def error(
+    code: errors.CodeLike,
+    *,
+    suggestions: Optional[list[str]] = None,
+    **template_kwargs: Any,
+) -> dict[str, Any]:
     """Wrap an error in the MCP response envelope.
 
     Parameters
@@ -300,6 +305,17 @@ def error(code: errors.CodeLike, **template_kwargs: Any) -> dict[str, Any]:
         string. Unknown codes fall through to a generic ``UNKNOWN``
         envelope (the tool layer should not be emitting unknown codes,
         but the envelope refuses to ever crash a response path over it).
+    suggestions:
+        Keyword-only override for the ``structuredContent.suggestions``
+        list. When ``None`` (the default), the static codebook list for
+        ``code`` is used. When supplied, the provided list REPLACES the
+        static list — callers that want both should concatenate
+        explicitly. Every string is run through :func:`_redact_paths`
+        so dynamic suggestions (e.g. fuzzy-matched walnut paths) cannot
+        leak absolute filesystem paths if a caller passes them
+        accidentally. ``None`` and ``[]`` are treated distinctly: the
+        first falls back to the codebook, the second emits an empty
+        list.
     **template_kwargs:
         Values substituted into the message template. Keys that the
         template does not reference are ignored — this is intentional,
@@ -339,7 +355,7 @@ def error(code: errors.CodeLike, **template_kwargs: Any) -> dict[str, Any]:
         # branch is defense-in-depth so the envelope never itself
         # crashes a response.
         message = "An unknown error occurred."
-        suggestions: tuple[str, ...] = ()
+        static_suggestions: tuple[str, ...] = ()
     else:
         short_code = enum_code.wire  # type: ignore[union-attr]
         # Defense-in-depth: redact absolute paths from string kwargs
@@ -365,12 +381,24 @@ def error(code: errors.CodeLike, **template_kwargs: Any) -> dict[str, Any]:
         # no-absolute-path test in test_errors.py prevents that at
         # merge time, but this is cheap and belt-and-suspenders.
         message = _redact_paths(message)
-        suggestions = spec.suggestions
+        static_suggestions = spec.suggestions
+
+    # Resolve the suggestions list. ``None`` (the default) falls back
+    # to the static codebook; an explicit list (even empty) REPLACES
+    # it. Dynamic suggestion strings are run through the path redactor
+    # too — the tool layer passes walnut POSIX-relpaths as fuzzy near-
+    # matches, which don't trigger the absolute-path regex, but a
+    # future caller that accidentally passes an absolute path still
+    # gets scrubbed. The redactor is idempotent on safe strings.
+    if suggestions is None:
+        final_suggestions: list[str] = list(static_suggestions)
+    else:
+        final_suggestions = [_redact_paths(str(s)) for s in suggestions]
 
     structured: dict[str, Any] = {
         "error": short_code,
         "message": message,
-        "suggestions": list(suggestions),
+        "suggestions": final_suggestions,
     }
 
     text = json.dumps(

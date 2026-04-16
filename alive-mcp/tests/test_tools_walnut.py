@@ -533,6 +533,24 @@ class GetWalnutStateTests(unittest.TestCase):
         self.assertTrue(env["isError"])
         self.assertEqual(env["structuredContent"]["error"], "NO_WORLD")
 
+    def test_unknown_walnut_includes_fuzzy_suggestions(self) -> None:
+        """ERR_WALNUT_NOT_FOUND includes fuzzy-matched paths in suggestions.
+
+        Acceptance criterion from the task spec: "Unknown walnut path ->
+        ERR_WALNUT_NOT_FOUND with suggestions populated from fuzzy
+        match on path tail."
+        """
+        env = self._call("04_Ventures/aliv")  # tail typo
+        self.assertTrue(env["isError"])
+        self.assertEqual(
+            env["structuredContent"]["error"], "WALNUT_NOT_FOUND"
+        )
+        suggestions = env["structuredContent"]["suggestions"]
+        # First suggestion is the "Did you mean" hint with near-matches.
+        self.assertGreaterEqual(len(suggestions), 1)
+        self.assertIn("Did you mean", suggestions[0])
+        self.assertIn("04_Ventures/alive", suggestions[0])
+
 
 # ---------------------------------------------------------------------------
 # read_walnut_kernel tests.
@@ -622,6 +640,22 @@ class ReadWalnutKernelTests(unittest.TestCase):
         self.assertTrue(env["isError"])
         self.assertEqual(env["structuredContent"]["error"], "NO_WORLD")
 
+    def test_unknown_walnut_includes_fuzzy_suggestions(self) -> None:
+        """``read_walnut_kernel`` mirrors ``get_walnut_state``'s suggestion wiring.
+
+        Same acceptance requirement applies to every read tool that can
+        emit ``ERR_WALNUT_NOT_FOUND``.
+        """
+        env = self._call("04_Ventures/aliv", "key")  # tail typo
+        self.assertTrue(env["isError"])
+        self.assertEqual(
+            env["structuredContent"]["error"], "WALNUT_NOT_FOUND"
+        )
+        suggestions = env["structuredContent"]["suggestions"]
+        self.assertGreaterEqual(len(suggestions), 1)
+        self.assertIn("Did you mean", suggestions[0])
+        self.assertIn("04_Ventures/alive", suggestions[0])
+
     def test_whole_file_not_paginated(self) -> None:
         # Write a long log and verify we get every byte back. Pagination
         # is read_log's job (T9), not this tool.
@@ -688,6 +722,41 @@ class ToolRegistrationTests(unittest.TestCase):
         registry = server._tool_manager._tools  # type: ignore[attr-defined]
         expected = {"list_walnuts", "get_walnut_state", "read_walnut_kernel"}
         self.assertLessEqual(expected, set(registry.keys()))
+
+    def test_read_walnut_kernel_file_enum_is_schema_enforced(self) -> None:
+        """Invalid ``file`` values are rejected at the FastMCP schema boundary.
+
+        Acceptance criterion: "Invalid `file` (e.g. `"foo"`) ->
+        ERR_VALIDATION (schema-enforced literal)". FastMCP translates
+        the pydantic literal violation into a ``ToolError`` before the
+        tool handler is invoked, which is the MCP equivalent of
+        schema-level validation failure -- the handler never sees the
+        bad value.
+        """
+        from mcp.server.fastmcp import FastMCP
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        server = FastMCP(name="test-schema-enforcement")
+        walnut_tools.register(server)
+
+        # Assert the schema itself carries the enum literal so the
+        # contract is visible to clients' schema inspection too.
+        tool = server._tool_manager._tools["read_walnut_kernel"]  # type: ignore[attr-defined]
+        file_prop = tool.parameters["properties"]["file"]
+        self.assertEqual(
+            set(file_prop["enum"]),
+            {"key", "log", "insights", "now"},
+        )
+
+        async def _call_bad() -> Any:
+            return await server._tool_manager.call_tool(  # type: ignore[attr-defined]
+                "read_walnut_kernel",
+                {"walnut": "04_Ventures/anything", "file": "foo"},
+                context=None,
+            )
+
+        with self.assertRaises(ToolError):
+            _run(_call_bad())
 
 
 if __name__ == "__main__":
