@@ -336,6 +336,47 @@ class ParseLogEntriesTests(unittest.TestCase):
         entries = lt_tools.parse_log_entries(path, "demo")
         self.assertEqual(entries[0].squirrel_id, "aabb1122")
 
+    def test_frontmatter_at_eof_without_trailing_newline_stripped(self) -> None:
+        """Frontmatter that runs to EOF with no trailing newline."""
+        content = (
+            "---\n"
+            "walnut: demo\n"
+            "---"  # no trailing newline at all.
+        )
+        path = self._write_log(content)
+        # No entries after the frontmatter -> still no entries, no crash.
+        self.assertEqual(lt_tools.parse_log_entries(path, "demo"), [])
+
+    def test_frontmatter_then_entry_without_trailing_newline(self) -> None:
+        """Frontmatter ends at EOF-like fence, then an entry follows."""
+        content = (
+            "---\n"
+            "walnut: demo\n"
+            "---\n"  # normal case, has newline -- should work too.
+            "## 2026-04-16T14:30:00 -- squirrel:aa11bb22\n"
+            "\n"
+            "Entry body.\n"
+            "\n"
+            "signed: squirrel:aa11bb22\n"
+        )
+        path = self._write_log(content)
+        entries = lt_tools.parse_log_entries(path, "demo")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].signed, "squirrel:aa11bb22")
+
+    def test_multiple_signed_lines_last_wins(self) -> None:
+        """Multiple ``signed:`` lines -> the LAST is the trailer."""
+        content = (
+            "## 2026-04-16T14:30:00\n"
+            "\n"
+            "Template referenced a signed: squirrel:quoted00 line.\n"
+            "\n"
+            "signed: squirrel:realseal\n"
+        )
+        path = self._write_log(content)
+        entries = lt_tools.parse_log_entries(path, "demo")
+        self.assertEqual(entries[0].signed, "squirrel:realseal")
+
     def test_trailing_whitespace_on_last_line_preserved(self) -> None:
         """_clip_at_divider must not mutate non-newline whitespace.
 

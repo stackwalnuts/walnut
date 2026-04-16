@@ -168,10 +168,14 @@ _ENTRY_HEADING_RE = re.compile(
 )
 
 #: YAML frontmatter block at the TOP of a log/chapter file. Non-greedy
-#: body so the FIRST closing ``---`` fence wins. ``\Z`` would also work
-#: but the match is always anchored by ``^---`` so we only need to bound
-#: the trailing fence.
-_FRONTMATTER_RE = re.compile(r"\A---\s*\n.*?\n---\s*\n", re.DOTALL)
+#: body so the FIRST closing ``---`` fence wins. The trailing newline
+#: after the closing fence is optional (``(?:\n|\Z)``) so a file whose
+#: frontmatter runs to EOF without a final newline still gets stripped
+#: -- otherwise the unterminated file would leave the closing ``---``
+#: in body text and the first entry heading would be invisible.
+_FRONTMATTER_RE = re.compile(
+    r"\A---\s*\n.*?\n---\s*(?:\n|\Z)", re.DOTALL
+)
 
 #: Entry-boundary divider -- a line that is exactly ``---`` (optional
 #: surrounding whitespace, no other content). Unlike the frontmatter
@@ -283,15 +287,24 @@ def _clip_at_divider(body_text: str) -> str:
 def _extract_signed(body: str) -> Optional[str]:
     """Return the ``signed:`` trailer value, or ``None`` when absent.
 
-    The signed line is preserved in the entry body verbatim (per the
-    frozen contract -- the seal belongs to the entry). We still
+    If an entry body contains multiple ``signed:`` lines (rare, but
+    possible when an entry embeds a quote or template that carries a
+    seal-shaped line mid-body), the LAST one is the trailer -- the
+    attribution seal that terminates the entry. ``finditer`` + last
+    match wins, rather than ``search`` which would surface the
+    topmost mention.
+
+    The signed line is preserved in the entry body verbatim (per
+    the frozen contract -- the seal belongs to the entry). We still
     surface the token separately so clients can assert attribution
     without re-parsing the body.
     """
-    m = _SIGNED_LINE_RE.search(body)
-    if m is None:
+    last: Optional[re.Match[str]] = None
+    for m in _SIGNED_LINE_RE.finditer(body):
+        last = m
+    if last is None:
         return None
-    return m.group(1).strip()
+    return last.group(1).strip()
 
 
 @dataclass(frozen=True, slots=True)
