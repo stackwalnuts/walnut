@@ -751,6 +751,44 @@ class KernelEventHandler(FileSystemEventHandler):
                 handle.cancel()
         self._pending_timers.clear()
 
+    def cancel_pending_for_uri(self, uri: str) -> None:
+        """Cancel the pending debounce timer for a single ``uri``, if any.
+
+        Called from the ``resources/subscribe`` handler so stale FS
+        events received BEFORE a client subscribed can't leak into a
+        notification fired AFTER the subscribe. Without this guard,
+        the following race is observable on macOS (FSEvents coalesces
+        with ~1s latency) and under CPU contention elsewhere:
+
+          1. Test fixture writes ``<walnut>/_kernel/log.md`` on disk
+             (BEFORE the observer starts watching).
+          2. Observer starts; FSEvents eventually delivers the stale
+             ``log.md`` create event.
+          3. The handler schedules a debounced emission for the log
+             URI at t_event + :data:`DEBOUNCE_SECONDS`.
+          4. The client subscribes to the log URI at some t_subscribe
+             BEFORE the timer fires but AFTER the event was received.
+          5. The debounce timer fires, finds a subscriber, and emits
+             ``resources/updated`` -- even though the file didn't
+             actually change after the subscription existed.
+
+        Cancelling the pending timer at subscribe time gives the
+        correct semantic: "notify me when this resource changes AFTER
+        I subscribed," not "notify me about any pending event on this
+        URI." Events received AFTER the subscribe cancel will still
+        schedule a fresh timer and fire normally.
+
+        Must run on the loop thread. No-op if no timer is pending for
+        the URI. Safe to call concurrently with a fire callback because
+        :meth:`asyncio.TimerHandle.cancel` is idempotent; a timer that
+        already fired between the registry check and this call will
+        have popped itself from ``_pending_timers`` via the ``_fire``
+        closure.
+        """
+        handle = self._pending_timers.pop(uri, None)
+        if handle is not None and not handle.cancelled():
+            handle.cancel()
+
 
 def _log_task_exception(task: "asyncio.Task[Any]") -> None:
     """Log uncaught exceptions from debounce-fire tasks.
@@ -847,6 +885,7 @@ def register_subscribe_handlers(
     server: FastMCP[Any],
     registry: SubscriptionRegistry,
     session_getter: Callable[[], Any],
+    handler_getter: Optional[Callable[[], Optional["KernelEventHandler"]]] = None,
 ) -> None:
     """Install MCP ``resources/subscribe`` and ``unsubscribe`` handlers.
 
@@ -856,6 +895,27 @@ def register_subscribe_handlers(
     token so the same session subscribing twice is idempotent, and
     different sessions are disambiguated even when the SDK shape
     changes across versions.
+
+    The optional ``handler_getter`` returns the active
+    :class:`KernelEventHandler` (or None if the observer has not
+    started yet). When provided, the subscribe handler cancels any
+    pending debounce timer for the URI BEFORE recording the
+    subscription. That guard closes a subtle stale-event race: on
+    macOS, FSEvents coalesces with ~1s latency, so a file written to
+    disk BEFORE the observer started can surface as an event AFTER
+    the observer starts -- and if a client subscribes between those
+    two moments, the debounced emission would fire with the (now
+    matching) subscriber set and deliver a notification for an event
+    that semantically predates the subscription. Cancelling on
+    subscribe enforces the "notify on changes AFTER I subscribed"
+    semantic consistently. See
+    :meth:`KernelEventHandler.cancel_pending_for_uri` for the full
+    rationale.
+
+    ``handler_getter`` is optional for backward-compat with callers
+    that wire up the registry before the observer exists (tests,
+    early-lifespan paths); a ``None`` handler is treated as "no
+    pending timers to cancel," which is the correct fallback.
 
     Why install both handlers even though v0.1 drops lazy-on-subscribe:
     the registry IS the emission filter. A client that never subscribes
@@ -877,6 +937,17 @@ def register_subscribe_handlers(
         uri = str(req.params.uri)
         session = session_getter()
         token = id(session) if session is not None else "anonymous"
+        # Drop any stale debounce timer for this URI BEFORE recording
+        # the subscription. Order matters: if we added to the registry
+        # first, a timer that fires between registry insert and cancel
+        # would find a subscriber and emit. Cancelling first closes
+        # that window -- any timer still pending at this point was
+        # scheduled from an event received before the subscribe, and
+        # by contract should not deliver a notification.
+        if handler_getter is not None:
+            handler = handler_getter()
+            if handler is not None:
+                handler.cancel_pending_for_uri(uri)
         await registry.subscribe(uri, token)
         logger.debug("subscribed session=%r to uri=%r", token, uri)
         return mcp_types.ServerResult(mcp_types.EmptyResult())

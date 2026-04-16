@@ -960,6 +960,14 @@ async def lifespan(server: FastMCP[AppContext]) -> AsyncIterator[AppContext]:
         server,
         app_context.subscription_registry,
         session_getter=lambda: app_context.active_session,
+        # Pass a lazy getter (not a direct reference) so the subscribe
+        # handler always sees the currently-bound handler. The observer
+        # + handler pair are recreated whenever the World changes
+        # across a Roots update (see :func:`_restart_observer`); a
+        # direct reference captured at registration time would point
+        # at a stale handler after the world changes. Reading from
+        # the context lazily always targets the active one.
+        handler_getter=lambda: app_context.observer_handler,
     )
 
     # Step 4c: install the session-capture wrapper UNCONDITIONALLY.

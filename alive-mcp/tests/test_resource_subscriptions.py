@@ -505,6 +505,84 @@ class DebouncedEmissionTests(unittest.IsolatedAsyncioTestCase):
         # Debounced emission was cancelled -- zero calls.
         self.assertEqual(self.updated_calls, [])
 
+    async def test_cancel_pending_for_uri_drops_stale_event(self) -> None:
+        """Stale-event guard: event before subscribe must not fire.
+
+        Models the race the subscribe-time cancel guards against:
+
+          1. FS event arrives on the handler (stale, from before
+             anyone subscribed). Debounce timer scheduled.
+          2. Client subscribes to the URI.
+          3. Timer would fire, find the now-present subscriber, and
+             emit -- incorrectly delivering a notification for a
+             change that happened before the subscription existed.
+
+        The :meth:`cancel_pending_for_uri` call MUST drop the stale
+        timer so step 3 never emits.
+        """
+        uri = encode_kernel_uri("04_Ventures/alive", "log")
+        # Step 1: stale event arrives BEFORE the subscribe.
+        self.handler.on_any_event(
+            _FakeEvent(
+                src_path="/fake/world/04_Ventures/alive/_kernel/log.md"
+            )
+        )
+        # Let the emitter-thread handoff land on the loop.
+        await asyncio.sleep(0.01)
+        # Step 2a: the subscribe handler cancels the stale timer for
+        # this URI (simulating register_subscribe_handlers behavior).
+        self.handler.cancel_pending_for_uri(uri)
+        # Step 2b: record the subscription in the registry.
+        await self.registry.subscribe(uri, "sess-1")
+        # Past the debounce window -- a non-cancelled timer would have
+        # fired by now. No emission expected.
+        await asyncio.sleep(0.15)
+        self.assertEqual(self.updated_calls, [])
+
+    async def test_cancel_pending_for_uri_leaves_other_uris(self) -> None:
+        """Only the targeted URI's timer is cancelled; others keep firing.
+
+        Subscribing to one URI must not drop in-flight events on
+        another URI that already has subscribers.
+        """
+        log_uri = encode_kernel_uri("04_Ventures/alive", "log")
+        key_uri = encode_kernel_uri("04_Ventures/alive", "key")
+        await self.registry.subscribe(key_uri, "sess-1")
+        # Both URIs receive events.
+        self.handler.on_any_event(
+            _FakeEvent(
+                src_path="/fake/world/04_Ventures/alive/_kernel/log.md"
+            )
+        )
+        self.handler.on_any_event(
+            _FakeEvent(
+                src_path="/fake/world/04_Ventures/alive/_kernel/key.md"
+            )
+        )
+        await asyncio.sleep(0.01)
+        # Cancel the stale log timer (as if a client just subscribed).
+        self.handler.cancel_pending_for_uri(log_uri)
+        await asyncio.sleep(0.15)
+        # ``key`` kept its timer and fired normally; ``log`` was
+        # cancelled and did not.
+        self.assertEqual(self.updated_calls, [key_uri])
+
+    async def test_cancel_pending_for_uri_unknown_is_noop(self) -> None:
+        """Cancelling a URI with no pending timer is a silent no-op."""
+        uri = encode_kernel_uri("04_Ventures/alive", "log")
+        # No events were scheduled; call must not raise.
+        self.handler.cancel_pending_for_uri(uri)
+        # And subsequent real events on the URI should still emit
+        # (we didn't break the handler's per-URI state).
+        await self.registry.subscribe(uri, "sess-1")
+        self.handler.on_any_event(
+            _FakeEvent(
+                src_path="/fake/world/04_Ventures/alive/_kernel/log.md"
+            )
+        )
+        await asyncio.sleep(0.15)
+        self.assertEqual(self.updated_calls, [uri])
+
 
 # ---------------------------------------------------------------------------
 # End-to-end: real server + real watchdog Observer + real filesystem.
