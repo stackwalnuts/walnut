@@ -99,7 +99,15 @@ Defined in `_pure/__init__.py`:
 |-------------------------|----------------|-----------------------------------------|
 | `WorldNotFoundError`    | `Exception`    | No ancestor of a path contains `.alive/` |
 | `KernelFileError`       | `Exception`    | Required `_kernel/*` file unreadable    |
-| `MalformedYAMLWarning`  | `Warning`      | Manifest / YAML parse failed            |
+| `MalformedYAMLWarning`  | `Warning`      | Structured-text parse/read failure on a kernel file, bundle manifest, squirrel entry, or `tasks.json` (YAML and JSON sources both emit this) |
+
+`MalformedYAMLWarning` is named after the original YAML manifest path it
+first guarded, but the extracted helpers emit it for every structured-text
+read failure they swallow -- JSON task files, JSON `now.json` projections,
+and YAML squirrel entries included. Callers filtering on this warning
+should expect both format families. The name is retained for API
+stability; if a format-agnostic rename happens later, the old name will
+stay as an alias.
 
 Exception classes map 1-to-1 onto v0.1 error-taxonomy codes that T4 defines
 (`ERR_NO_WORLD`, `ERR_KERNEL_FILE_MISSING` / `ERR_KERNEL_FILE_CORRUPT`,

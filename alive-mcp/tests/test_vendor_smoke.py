@@ -45,23 +45,32 @@ FIXTURE_WALNUT = FIXTURE_ROOT / "demo-walnut"
 # needing the package installed in a venv.
 SRC_ROOT = pathlib.Path(__file__).parent.parent / "src"
 
-# Upstream source for the direct-copy file. When running from the monorepo
-# worktree, the path resolves -- the byte-identity test runs. When running
-# from a distributed tarball (no plugin tree alongside), the path misses
-# and the test is skipped. This is intentional per VENDORING.md.
-#
-# Path search order: plugin tree at monorepo root, then ../../plugins (in
-# case the test runs from inside a claude-code/ checkout).
-_UPSTREAM_CANDIDATES = [
-    pathlib.Path(__file__).parent.parent.parent
-    / "plugins" / "alive" / "scripts" / "walnut_paths.py",
-    pathlib.Path(__file__).parent.parent.parent.parent
-    / "plugins" / "alive" / "scripts" / "walnut_paths.py",
-]
-UPSTREAM_WALNUT_PATHS: pathlib.Path | None = next(
-    (p for p in _UPSTREAM_CANDIDATES if p.is_file()),
-    None,
-)
+# Upstream source for the direct-copy file. Discovered by walking UPWARD
+# from this test file, checking each ancestor for the sentinel
+# ``plugins/alive/scripts/walnut_paths.py``. Robust to the several layouts
+# this repo ships in:
+#   - monorepo main checkout:        <repo>/claude-code/plugins/...
+#   - worktree of alive-mcp-v0.1:    <repo>/claude-code/.worktrees/alive-mcp-v0.1/plugins/...
+#     (upstream lives at <repo>/claude-code/plugins/... -- one more parent up)
+#   - future layouts:                anywhere above, as long as the sentinel exists
+# When the sentinel isn't found within 8 ancestors, the byte-identity test
+# skips -- tarball installs and tests-in-isolation legitimately don't have
+# the plugin tree alongside.
+_SENTINEL = pathlib.Path("plugins") / "alive" / "scripts" / "walnut_paths.py"
+
+
+def _find_upstream_walnut_paths() -> pathlib.Path | None:
+    here = pathlib.Path(__file__).resolve()
+    # Check ``here`` plus up to 8 ancestors -- enough for any plausible
+    # monorepo layout without being so deep it starts hitting / .
+    for ancestor in [here, *here.parents][:9]:
+        candidate = ancestor / _SENTINEL
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+UPSTREAM_WALNUT_PATHS: pathlib.Path | None = _find_upstream_walnut_paths()
 
 # Source files we extracted into -- these must be scrubbed of print / exit.
 EXTRACTED_SOURCES = [

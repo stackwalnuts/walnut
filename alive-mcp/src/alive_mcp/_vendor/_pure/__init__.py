@@ -45,13 +45,23 @@ class KernelFileError(Exception):
 
 
 class MalformedYAMLWarning(Warning):
-    """Emitted when a YAML blob (manifest, squirrel entry) cannot be parsed.
+    """Emitted when a structured-text source cannot be read or parsed.
+
+    Despite the "YAML" in the name (retained for API stability -- the
+    original use site was a YAML manifest), the extracted helpers emit
+    this warning for every structured-text read failure they swallow:
+
+    - YAML bundle manifests (`context.manifest.yaml`)
+    - YAML squirrel entries (`.alive/_squirrels/*.yaml`)
+    - JSON task files (`_kernel/tasks.json`, `bundles/*/tasks.json`)
+    - JSON completed files (`_kernel/completed.json`)
+    - JSON child projections (`_kernel/now.json`, `_kernel/_generated/now.json`)
 
     Uses ``Warning`` rather than ``Exception`` because the upstream CLIs
-    tolerate malformed files by skipping them. Extracted helpers follow the
-    same policy: they return ``None`` / omit the entry, and optionally emit
-    this warning via the ``warnings`` module so callers can observe drift
-    without crashing.
+    tolerate malformed files by skipping them; extracted helpers follow
+    the same policy so a single drifted file doesn't crash a projection.
+    Callers that want hard failures can install a warning filter:
+    ``warnings.simplefilter("error", MalformedYAMLWarning)``.
     """
 
 
