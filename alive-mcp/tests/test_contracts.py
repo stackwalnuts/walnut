@@ -33,11 +33,15 @@ all three fixtures in lockstep.
 
 Skip posture
 ------------
-If ``npx`` / ``node`` / ``uv`` are not on PATH (e.g. a minimal CI image
-that forgot the Node toolchain) the test skips with a clear reason
-rather than failing mysteriously. The T15 CI job is the canonical place
-where all three binaries are guaranteed present; skipping here keeps
-local unit-test runs clean for contributors on Python-only machines.
+Local dev: if ``npx`` / ``node`` / ``uv`` are missing from PATH the
+test SKIPS with a clear reason rather than failing mysteriously. This
+keeps unit-test runs clean for contributors on Python-only machines.
+
+CI: when the environment variable ``CI`` is truthy (GitHub Actions and
+most CI runners set ``CI=true`` automatically), a missing toolchain is
+a HARD FAILURE. The T15 CI job must provide all three binaries so the
+"CI diffs on every run" invariant cannot be silently bypassed by a
+pipeline that forgot to install Node.
 
 T15 hand-off
 ------------
@@ -50,6 +54,7 @@ invocation target.
 from __future__ import annotations
 
 import difflib
+import os
 import pathlib
 import shutil
 import subprocess
@@ -88,6 +93,18 @@ def _toolchain_available() -> tuple[bool, str]:
     return True, ""
 
 
+def _running_in_ci() -> bool:
+    """Return True if we look like a CI environment.
+
+    Uses the de-facto-standard ``CI`` envvar (set to ``true`` by GitHub
+    Actions, GitLab, CircleCI, and most other runners). Accept any
+    truthy value so contributors can force the CI-posture locally by
+    exporting ``CI=1`` to smoke-test their pipeline config.
+    """
+    val = os.environ.get("CI", "").strip().lower()
+    return val not in ("", "0", "false", "no", "off")
+
+
 def _run_generator(method: str) -> str:
     """Run the generator and return its stdout.
 
@@ -122,11 +139,24 @@ class ContractSnapshotTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         ok, reason = _toolchain_available()
-        if not ok:
-            raise unittest.SkipTest(
-                "Inspector contract tests require node + npx + uv on PATH: "
-                + reason
+        if ok:
+            return
+        # In CI the toolchain MUST be present. A silent skip would
+        # bypass the "CI diffs on every run" invariant: a pipeline
+        # change that drops Node from the runner would start letting
+        # contract drift land unchecked. Fail hard and loud.
+        if _running_in_ci():
+            raise AssertionError(
+                "Inspector contract tests require node + npx + uv on PATH in "
+                "CI (CI envvar is truthy). Fix the CI runner to install "
+                "Node.js and uv, or unset CI if this is a local dev "
+                "machine. Reason: " + reason
             )
+        raise unittest.SkipTest(
+            "Inspector contract tests require node + npx + uv on PATH "
+            "(local dev skip; set CI=1 to make this a hard failure). "
+            "Reason: " + reason
+        )
 
     def _assert_snapshot_matches(self, method: str, golden_name: str) -> None:
         golden_path = _CONTRACTS_DIR / golden_name
@@ -358,6 +388,68 @@ class NormalizerUnitTests(unittest.TestCase):
     def test_invalid_json_raises(self) -> None:
         with self.assertRaises(ValueError):
             self._mod.normalize("not json at all", "tools/list")
+
+    def test_duplicate_identity_keys_have_deterministic_order(self) -> None:
+        """Two items with the same primary key must still sort stably.
+
+        Without a tiebreaker, Python's ``sorted`` is stable-against-
+        input-order, and the Inspector's input order is not guaranteed.
+        We want the SAME two items to come out in the SAME order
+        regardless of input order.
+        """
+        import json
+
+        # Item A and B both named "t" — ambiguous primary key.
+        a = {"name": "t", "marker": "A"}
+        b = {"name": "t", "marker": "B"}
+        raw1 = json.dumps({"tools": [a, b]})
+        raw2 = json.dumps({"tools": [b, a]})
+        out1 = self._mod.normalize(raw1, "tools/list")
+        out2 = self._mod.normalize(raw2, "tools/list")
+        self.assertEqual(
+            out1,
+            out2,
+            msg=(
+                "duplicate-primary-key items ordered differently depending "
+                "on input order -- tiebreaker is not deterministic"
+            ),
+        )
+
+    def test_missing_identity_key_does_not_break(self) -> None:
+        """Items missing the identity key still sort deterministically."""
+        import json
+
+        raw = json.dumps(
+            {
+                "tools": [
+                    {"marker": "no_name_2"},
+                    {"name": "b", "marker": "has_name"},
+                    {"marker": "no_name_1"},
+                ]
+            }
+        )
+        out = self._mod.normalize(raw, "tools/list")
+        data = json.loads(out)
+        # Items without ``name`` collapse to primary="", so they sort
+        # before "b". The tiebreaker (full-dict JSON) orders the two
+        # nameless items deterministically by their marker.
+        names_or_markers = [t.get("name", t.get("marker")) for t in data["tools"]]
+        # The two nameless items come first (in a deterministic order),
+        # "b" comes last.
+        self.assertEqual(names_or_markers[-1], "b")
+        # Re-normalize with the input in a different order; output
+        # must be identical.
+        raw_shuffled = json.dumps(
+            {
+                "tools": [
+                    {"name": "b", "marker": "has_name"},
+                    {"marker": "no_name_1"},
+                    {"marker": "no_name_2"},
+                ]
+            }
+        )
+        out_shuffled = self._mod.normalize(raw_shuffled, "tools/list")
+        self.assertEqual(out, out_shuffled)
 
 
 if __name__ == "__main__":

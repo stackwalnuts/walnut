@@ -45,6 +45,36 @@ _SORT_KEYS: dict[str, tuple[str, str]] = {
 }
 
 
+def _sort_key_builder(item_key: str):
+    """Build a stable sort key callable with deterministic tie-breaking.
+
+    Primary key: the item's natural identity (``name`` / ``uri``).
+    Secondary key: the full canonicalized JSON of the item. Without the
+    secondary key, two items that happen to share an identity string
+    (duplicate name in a future SDK bug, or items missing the identity
+    key that both fall back to ``""``) would reintroduce
+    non-determinism — Python's ``sorted`` is stable, but stable against
+    INPUT order, and the input order here is the Inspector's, which is
+    not guaranteed. The JSON secondary guarantees a total order.
+
+    For items that are not dicts (defensive only — the MCP list
+    primitives all return dicts), we sort by ``repr`` so the sort still
+    converges on a unique order.
+    """
+
+    def _key(item):
+        if not isinstance(item, dict):
+            return (repr(item), repr(item))
+        primary = item.get(item_key, "")
+        # ``sort_keys=True`` makes the secondary deterministic even
+        # when dicts with the same content were built in different
+        # insertion orders.
+        secondary = json.dumps(item, sort_keys=True, ensure_ascii=False)
+        return (primary, secondary)
+
+    return _key
+
+
 def normalize(raw_text: str, method: str) -> str:
     """Parse ``raw_text``, canonicalize, return pretty-printed JSON.
 
@@ -68,10 +98,7 @@ def normalize(raw_text: str, method: str) -> str:
     if isinstance(data, dict) and isinstance(data.get(list_key), list):
         data[list_key] = sorted(
             data[list_key],
-            # Defensive get: some items may lack the identity key in a
-            # future schema change; fall back to the item's repr so
-            # ordering stays deterministic even then.
-            key=lambda item: item.get(item_key, "") if isinstance(item, dict) else repr(item),
+            key=_sort_key_builder(item_key),
         )
 
     # ``sort_keys=True`` recurses through every nested dict, so we do

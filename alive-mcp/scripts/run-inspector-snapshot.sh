@@ -23,14 +23,21 @@
 #
 # T14 → T15 transition (dependency pinning)
 # ----------------------------------------
-# At T14 we invoke the Inspector via ``npx -y @modelcontextprotocol/
-# inspector`` which dynamically resolves the latest version from the npm
-# registry. That is fine for local dev but UNACCEPTABLE in CI — the
-# no-phone-home posture in T15 forbids network access during the test
-# phase. T15 pins the Inspector via a committed ``package-lock.json`` at
-# the repo root and swaps this script to call
-# ``./node_modules/.bin/mcp-inspector``. The rest of the pipeline
-# (normalization, snapshot shape, test harness) is unchanged.
+# T14 pins the Inspector version INLINE via the
+# ``INSPECTOR_VERSION`` constant below — ``npx -y
+# @modelcontextprotocol/inspector@<INSPECTOR_VERSION>`` — so an upstream
+# Inspector release cannot spontaneously break the snapshot diff. The
+# cost of inline pinning is that the first run on a cold machine still
+# touches the npm registry to fetch that version into the npx cache;
+# that is acceptable for LOCAL dev.
+#
+# For CI, T15 replaces this dynamic-fetch path with a committed
+# ``package-lock.json`` + ``npm ci`` install phase and swaps the
+# invocation to ``./node_modules/.bin/mcp-inspector`` — the
+# no-phone-home posture in T15 forbids any network access during the
+# test phase. To bump Inspector: update ``INSPECTOR_VERSION`` here,
+# update T15's ``package-lock.json`` to match, then
+# ``scripts/update-snapshots.sh`` to regenerate the goldens.
 #
 # Exit codes
 # ----------
@@ -40,6 +47,14 @@
 #   3  Inspector subprocess failed (non-zero exit)
 
 set -euo pipefail
+
+# Pinned Inspector version. Bump here + regenerate goldens when
+# upstream ships a new major. Allow an override via
+# ``ALIVE_MCP_INSPECTOR_VERSION`` so ad-hoc bumps don't require editing
+# the script (useful for CI experimenting with a pre-release). The
+# default captures whatever was current when T14 landed; T15's
+# ``package-lock.json`` must match.
+INSPECTOR_VERSION="${ALIVE_MCP_INSPECTOR_VERSION:-0.21.2}"
 
 usage() {
     cat >&2 <<'EOF'
@@ -90,18 +105,29 @@ if [[ ! -d "${WORLD_ROOT}" ]]; then
 fi
 
 # Inspector stderr carries npm warnings and server banner noise. We
-# keep it OUT of the snapshot but let it reach the terminal when run
-# interactively (tests redirect stderr via Python).
-RAW_JSON="$(
+# must keep it OUT of the snapshot (stdout-only) but we CANNOT
+# discard it — on failure, the stderr is the most useful diagnostic
+# (npx cache miss, uv sync error, server crash). Capture stderr to a
+# tempfile, let stdout flow to ``RAW_JSON``. On success we drop the
+# stderr silently; on failure we echo it so the caller / test harness
+# sees the real reason.
+STDERR_LOG="$(mktemp -t alive-mcp-inspector-stderr.XXXXXX)"
+# Ensure tempfile cleanup on any exit path (success or abort).
+trap 'rm -f "${STDERR_LOG}"' EXIT
+
+if ! RAW_JSON="$(
     cd "${PKG_ROOT}" \
     && ALIVE_WORLD_ROOT="${WORLD_ROOT}" \
-       npx -y @modelcontextprotocol/inspector \
+       npx -y "@modelcontextprotocol/inspector@${INSPECTOR_VERSION}" \
            --cli uv run alive-mcp \
-           --method "${METHOD}" 2>/dev/null
-)" || {
+           --method "${METHOD}" 2>"${STDERR_LOG}"
+)"; then
     echo "error: Inspector subprocess failed for method ${METHOD}" >&2
+    echo "--- Inspector stderr ---" >&2
+    cat "${STDERR_LOG}" >&2
+    echo "--- end Inspector stderr ---" >&2
     exit 3
-}
+fi
 
 # Normalize via the normalize_snapshot.py helper so the logic is
 # testable independently of this shell wrapper. Sort top-level list

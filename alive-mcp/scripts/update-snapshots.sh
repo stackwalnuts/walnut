@@ -60,10 +60,15 @@ update_one() {
     local method="$1"
     local fixture="$2"
     echo "==> updating ${fixture} (method=${method})" >&2
-    # Write to a temp file first so a generator failure leaves the
-    # existing golden untouched. atomic-replace on success.
+    # Write to a temp file in the SAME DIRECTORY as the final fixture
+    # so the subsequent ``mv`` is a true same-filesystem atomic
+    # rename. The system-wide ``$TMPDIR`` (default on macOS / Linux)
+    # can sit on a different filesystem than the repo; a cross-fs
+    # ``mv`` degrades to copy-then-unlink, which is NOT atomic and
+    # can leave a partial fixture on an interrupted run. Keeping the
+    # tempfile next to the target sidesteps that.
     local tmp
-    tmp="$(mktemp -t alive-mcp-snapshot.XXXXXX)"
+    tmp="$(mktemp "${CONTRACTS_DIR}/.${fixture}.tmp.XXXXXX")"
     if ! "${SCRIPT_DIR}/run-inspector-snapshot.sh" "${method}" >"${tmp}"; then
         rm -f "${tmp}"
         echo "error: snapshot generator failed for ${method}" >&2
