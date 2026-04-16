@@ -302,12 +302,29 @@ def _resolve_kernel_file_for_uri(
     closest semantic match the spec offers for this class of error.
     """
     # safe_join runs realpath + commonpath; we don't need to re-run
-    # those checks in this module.
+    # those checks in this module. A broad ``Exception`` catch around
+    # it is intentional: ``os.path.realpath`` / ``os.path.commonpath``
+    # can raise :class:`OSError` (``ENAMETOOLONG``, ``EILSEQ``),
+    # :class:`ValueError` (null bytes, cross-drive paths on Windows),
+    # or platform-specific oddities. The resource layer's error
+    # channel has no envelope-level redaction, so every failure here
+    # must be translated into a generic ``INVALID_PARAMS`` rather
+    # than bubbling up a raw stacktrace that could echo absolute
+    # paths from ``str(exc)`` into the client.
     try:
         walnut_abs = safe_join(world_root, *walnut_path.split("/"))
     except errors.PathEscapeError:
         _raise_invalid_params(
             "walnut path escapes the authorized World root"
+        )
+    except (OSError, ValueError):
+        # ``OSError`` covers ENAMETOOLONG, ENOENT on realpath probes,
+        # and similar. ``ValueError`` covers null-byte and related
+        # path-normalization failures. Either way, the client-facing
+        # diagnosis is "that wasn't a valid walnut path" -- no
+        # internal detail leaks.
+        _raise_invalid_params(
+            "walnut path {!r} is not resolvable".format(walnut_path)
         )
 
     # Walnut predicate: _kernel/key.md must exist and resolve inside
@@ -382,6 +399,20 @@ def register(server: FastMCP[Any]) -> None:
         single-digit-millisecond directory walk; rebuilding the list
         on every ``resources/list`` request is simpler than cache
         invalidation for T11's listChanged semantics.
+
+        Error shape:
+
+        * ``world_root is None`` -> return ``[]``. A server that has
+          not yet resolved a World legitimately has no resources to
+          enumerate; returning an error would prevent the client from
+          showing its resource picker before Roots discovery
+          completes.
+        * Permission / IO failure walking the inventory -> raise
+          :class:`McpError` with ``INTERNAL_ERROR``. These are
+          genuine failures where silently returning ``[]`` would
+          mislead the client into thinking the World is empty when
+          it actually contains walnuts we couldn't read. JSON-RPC's
+          error channel is the right surface.
         """
         world_root = _get_world_root(server)
         if world_root is None:
@@ -399,19 +430,29 @@ def register(server: FastMCP[Any]) -> None:
         try:
             return _build_resource_entries(world_root)
         except PermissionError as exc:
-            # A permission failure at the World root is a real signal
-            # the client needs to surface, but MCP's resources/list
-            # has no error channel -- the response type is a list.
-            # Log and degrade to empty; the client can retry later.
+            # Real permission failure: the World root exists but we
+            # can't traverse it. Empty-list would lie to the client
+            # ("World has no walnuts" vs "we can't see them").
+            # Surface via JSON-RPC error so the client shows a
+            # real error in the resource picker.
             logger.warning(
                 "list_resources: walnut inventory denied: %s", exc
             )
-            return []
+            _raise_internal_error(
+                "permission denied enumerating walnuts; check that the "
+                "server process can read the World root"
+            )
         except OSError as exc:
             logger.warning(
                 "list_resources: walnut inventory failed: %s", exc
             )
-            return []
+            _raise_internal_error(
+                "walnut inventory failed: {}".format(exc.__class__.__name__)
+            )
+        # ``_raise_internal_error`` always raises, but mypy's control
+        # flow analyzer doesn't know that -- the explicit return is
+        # unreachable in practice.
+        return []  # pragma: no cover
 
     @server._mcp_server.read_resource()
     async def _read_kernel_resource(

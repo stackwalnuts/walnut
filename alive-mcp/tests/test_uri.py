@@ -322,6 +322,61 @@ class DecoderRejectsMalformedURIs(unittest.TestCase):
                 "alive://walnut/04_Ventures/alive/kernel/log#frag"
             )
 
+    def test_malformed_percent_escape_rejected(self) -> None:
+        """``%`` followed by non-hex characters is malformed per RFC 3986.
+
+        The stdlib ``urllib.parse.unquote`` silently preserves these as
+        literal ``%`` bytes in the output. Strict decoding rejects them
+        so a client cannot smuggle non-canonical walnut paths past the
+        URI boundary.
+        """
+        # ``%ZZ`` -- both chars non-hex.
+        with self.assertRaises(InvalidURIError):
+            decode_kernel_uri(
+                "alive://walnut/04_Ventures/a%ZZb/kernel/log"
+            )
+        # Trailing ``%`` with no following chars.
+        with self.assertRaises(InvalidURIError):
+            decode_kernel_uri(
+                "alive://walnut/04_Ventures/alive%/kernel/log"
+            )
+        # ``%`` followed by only one hex char.
+        with self.assertRaises(InvalidURIError):
+            decode_kernel_uri(
+                "alive://walnut/04_Ventures/alive%2/kernel/log"
+            )
+
+    def test_invalid_utf8_byte_sequence_rejected(self) -> None:
+        """Percent-encoded invalid UTF-8 bytes (e.g. ``%FF``) are rejected.
+
+        Stdlib decoding would use ``errors="replace"`` and emit
+        U+FFFD, producing a walnut path that doesn't match the bytes
+        the client sent. Strict decoding raises instead -- the
+        audit log and the client both see "this URI is garbage"
+        rather than a mysteriously-mutated walnut_path.
+        """
+        # ``%FF`` is not a valid UTF-8 start byte.
+        with self.assertRaises(InvalidURIError):
+            decode_kernel_uri("alive://walnut/04_Ventures/%FF/kernel/log")
+        # ``%C3`` (continuation-expected lead byte) followed by ASCII.
+        with self.assertRaises(InvalidURIError):
+            decode_kernel_uri(
+                "alive://walnut/04_Ventures/a%C3b/kernel/log"
+            )
+
+    def test_nul_byte_rejected(self) -> None:
+        """A percent-encoded NUL byte (``%00``) must be rejected.
+
+        NUL is invalid in filenames on every supported platform; even
+        if the URI parser accepted it, the path-safety layer would
+        stumble when trying to ``open()`` the target. Rejecting at
+        the URI boundary keeps the error message precise.
+        """
+        with self.assertRaises(InvalidURIError):
+            decode_kernel_uri(
+                "alive://walnut/04_Ventures/a%00b/kernel/log"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Cross-checks: every legal walnut path shape produces a unique URI.

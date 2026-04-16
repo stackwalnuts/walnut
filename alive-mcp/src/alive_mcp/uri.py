@@ -111,9 +111,71 @@ Public API
 
 from __future__ import annotations
 
+import re
 import unicodedata
 import urllib.parse
 from typing import Tuple
+
+#: Every percent-escape MUST be ``%`` + two hex digits, per RFC 3986
+#: section 2.1. Anything else (``%ZZ``, ``%`` at the end of a segment,
+#: ``%A``) is a malformed escape. Strict decoding rejects these rather
+#: than silently leaving them intact (which is what
+#: :func:`urllib.parse.unquote` does by default). The regex is anchored
+#: per scan-iteration via ``re.fullmatch`` below.
+_PERCENT_ESCAPE_RE = re.compile(r"%[0-9A-Fa-f]{2}")
+
+#: Any stray ``%`` that is NOT part of a valid escape. We scan for this
+#: AFTER removing all valid escapes to surface the malformed ones.
+_STRAY_PERCENT_RE = re.compile(r"%")
+
+
+def _strict_percent_decode(segment: str) -> str:
+    """Decode a single URI path segment with strict RFC 3986 semantics.
+
+    Guards against two classes of malformed input that
+    :func:`urllib.parse.unquote` accepts silently:
+
+    1. Invalid escape sequences (``%ZZ``, a trailing ``%`` with fewer
+       than two characters after it). The stdlib version leaves these
+       intact in the output, producing a decoded value that still
+       contains a literal ``%`` -- a confusing and non-canonical
+       round-trip. Strict decoding rejects them.
+    2. Invalid UTF-8 byte sequences (e.g. ``%FF`` which decodes to a
+       byte that is not the start of any legal UTF-8 sequence). The
+       stdlib version silently replaces with ``U+FFFD``
+       (``errors="replace"``). Strict decoding raises
+       :class:`InvalidURIError` so the caller can reject the URI
+       instead of accepting a mojibake walnut path.
+
+    Implementation: replace each valid ``%xx`` with a placeholder,
+    assert no stray ``%`` remains, then decode the byte sequence with
+    ``errors="strict"``.
+
+    Returns the decoded string. Raises :class:`InvalidURIError` on any
+    malformed escape or invalid UTF-8 byte sequence.
+    """
+    # Scan for stray percent-signs that aren't valid escapes. We work
+    # on the raw segment; any ``%`` remaining after removing all valid
+    # ``%xx`` matches is malformed.
+    stripped = _PERCENT_ESCAPE_RE.sub("", segment)
+    if _STRAY_PERCENT_RE.search(stripped):
+        raise InvalidURIError(
+            "malformed percent-escape in URI segment: {!r}".format(segment)
+        )
+    # Now decode the byte sequence with UTF-8 strict. ``unquote_to_bytes``
+    # returns raw bytes with escapes interpreted; we decode explicitly
+    # with ``errors="strict"`` so an invalid UTF-8 sequence raises
+    # :class:`UnicodeDecodeError` which we re-raise as
+    # :class:`InvalidURIError`.
+    try:
+        raw_bytes = urllib.parse.unquote_to_bytes(segment)
+        return raw_bytes.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise InvalidURIError(
+            "invalid UTF-8 byte sequence in URI segment {!r}: {}".format(
+                segment, exc.reason
+            )
+        ) from exc
 
 __all__ = [
     "InvalidURIError",
@@ -384,11 +446,13 @@ def decode_kernel_uri(uri: str) -> Tuple[str, str]:
                     parts.path
                 )
             )
-        # ``unquote`` preserves non-encoded characters and decodes
-        # ``%xx`` byte by byte via UTF-8. Any malformed percent
-        # sequence falls through as-is in modern Python; we then
-        # flag ``.`` and ``..`` on the decoded value for rejection.
-        decoded = urllib.parse.unquote(raw)
+        # Strict percent-decoding: reject ``%ZZ``-style malformed
+        # escapes AND reject invalid UTF-8 byte sequences. The stdlib
+        # ``urllib.parse.unquote`` silently accepts both, producing
+        # non-canonical output; we raise :class:`InvalidURIError`
+        # instead so the caller gets a clear boundary-violation
+        # signal.
+        decoded = _strict_percent_decode(raw)
         if decoded in (".", ".."):
             raise InvalidURIError(
                 "walnut_path has illegal segment {!r}".format(decoded)
@@ -401,6 +465,16 @@ def decode_kernel_uri(uri: str) -> Tuple[str, str]:
             # client a clearer error than a generic path-escape.
             raise InvalidURIError(
                 "walnut_path segment must not contain '/': {!r}".format(decoded)
+            )
+        # Reject NUL bytes and other control characters that are
+        # invalid in filenames on every supported platform. Letting
+        # these through would pass a bogus path to :func:`safe_join`
+        # and rely on downstream ``open()`` to raise -- the resource
+        # layer's contract is clearer if we reject at the URI
+        # boundary.
+        if "\x00" in decoded:
+            raise InvalidURIError(
+                "walnut_path segment contains NUL byte: {!r}".format(raw)
             )
         decoded_segments.append(decoded)
 

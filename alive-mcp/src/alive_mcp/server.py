@@ -1,8 +1,19 @@
 """FastMCP server bootstrap for alive-mcp v0.1.
 
 This module wires a :class:`FastMCP` instance into a runnable stdio JSON-RPC
-server. It is the shell that T6-T11 will hang tools and resources off; v0.1
-stops here with no tools, no resources, and no dynamic capabilities.
+server. It is the shell that T6-T11 hang tools and resources off. As of
+T10, ``build_server`` registers:
+
+* 10 read-only tools (T6-T9) on the tool surface.
+* Kernel-file resources (T10) under the ``alive://walnut/.../kernel/*``
+  URI scheme, with ``resources.subscribe=True`` and
+  ``resources.listChanged=True`` advertised today and delivery landing in
+  T11.
+* The audit queue + writer-stub machinery (T12 replaces the writer body).
+
+The module still owns the capability-override shim, Roots handshake, and
+lifespan wiring -- the pieces that have to exist at ``initialize`` time
+before any tool or resource is invoked.
 
 Contract surface
 ----------------

@@ -465,6 +465,80 @@ class KernelResourceReadTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class KernelResourceListErrorMapping(unittest.TestCase):
+    """Inventory failures surface on the JSON-RPC error channel, not as ``[]``.
+
+    Silently returning an empty list would mislead the client into
+    thinking the World has no walnuts when reality is "we couldn't
+    enumerate them." The handler raises :class:`McpError` with
+    ``INTERNAL_ERROR`` so the client shows a real error in its
+    resource picker.
+
+    These tests patch the inventory helper to simulate the failure
+    modes directly -- reproducing a filesystem-level PermissionError
+    through the in-memory session harness requires chmod dances that
+    also break World discovery (the probe reads the directory too),
+    so the unit-level shim gives us deterministic coverage of the
+    mapping code.
+    """
+
+    def test_permission_error_maps_to_internal_error(self) -> None:
+        from unittest.mock import patch
+
+        from mcp.shared.exceptions import McpError
+
+        from alive_mcp.resources import kernel as kernel_resources
+
+        world_root, cleanup = _new_world()
+        self.addCleanup(cleanup)
+        _make_walnut(world_root, "04_Ventures/alive", goal="x")
+
+        async def factory(client: Any) -> Any:
+            try:
+                await client.list_resources()
+            except McpError as exc:
+                return exc
+            return None
+
+        with patch.object(
+            kernel_resources,
+            "_build_resource_entries",
+            side_effect=PermissionError("denied"),
+        ):
+            exc = _run_with_world(world_root, factory)
+
+        self.assertIsNotNone(exc)
+        self.assertEqual(exc.error.code, -32603)
+
+    def test_oserror_maps_to_internal_error(self) -> None:
+        from unittest.mock import patch
+
+        from mcp.shared.exceptions import McpError
+
+        from alive_mcp.resources import kernel as kernel_resources
+
+        world_root, cleanup = _new_world()
+        self.addCleanup(cleanup)
+        _make_walnut(world_root, "04_Ventures/alive", goal="x")
+
+        async def factory(client: Any) -> Any:
+            try:
+                await client.list_resources()
+            except McpError as exc:
+                return exc
+            return None
+
+        with patch.object(
+            kernel_resources,
+            "_build_resource_entries",
+            side_effect=OSError("ENOSPC"),
+        ):
+            exc = _run_with_world(world_root, factory)
+
+        self.assertIsNotNone(exc)
+        self.assertEqual(exc.error.code, -32603)
+
+
 class KernelResourceRegisterTests(unittest.TestCase):
     """:func:`register` wires handlers onto the low-level server.
 
