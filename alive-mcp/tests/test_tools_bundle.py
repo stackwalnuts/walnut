@@ -395,6 +395,15 @@ class ListBundlesTests(unittest.TestCase):
         Security regression guard: without the containment check, a
         walnut owner could symlink a bundle to
         ``/etc/some-directory`` and the tool would list it.
+
+        NOTE: a bare dir-symlink is typically NOT traversed by
+        ``os.walk(followlinks=False)``, so this test alone doesn't
+        prove the intended invariant -- it proves the path is
+        filtered should the vendored scanner ever start following
+        links. The stronger guarantee is covered by
+        :meth:`test_symlinked_manifest_pointing_outside_is_dropped`
+        below, which exercises the manifest-read gate that actually
+        defends against symlink attacks.
         """
         # Create a real bundle outside the World.
         outside = tempfile.mkdtemp(prefix="alive-mcp-outside-")
@@ -410,6 +419,48 @@ class ListBundlesTests(unittest.TestCase):
         env = self._call("04_Ventures/alive")
         paths = {b["path"] for b in env["structuredContent"]["bundles"]}
         self.assertNotIn("escaping-bundle", paths)
+
+    def test_symlinked_manifest_pointing_outside_is_dropped(self) -> None:
+        """A bundle with a real in-world directory but symlinked manifest.
+
+        This is the security-critical case the previous symlinked-
+        *directory* test didn't actually exercise: the bundle
+        directory is ordinary and inside the World, but its
+        ``context.manifest.yaml`` is a symlink to a file OUTSIDE the
+        World. Without the manifest-read gate, the tool would parse
+        the outside file and surface its captured values (``goal``,
+        ``status``, etc.) via :func:`list_bundles` -- a direct
+        violation of ``openWorldHint=False``.
+
+        The fix in :func:`_safe_read_manifest` rejects the manifest
+        via realpath + commonpath before the parser opens it, so
+        the bundle is dropped entirely (same posture as the walnut
+        kernel-file escape check in T6).
+        """
+        # Real bundle dir inside the World.
+        bundle_dir = self.world.walnut_path("04_Ventures/alive/bait")
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        # The manifest is a symlink to an outside file containing
+        # values the tool would otherwise surface.
+        outside_manifest = pathlib.Path(
+            tempfile.mkstemp(prefix="alive-mcp-escape-manifest-", suffix=".yaml")[1]
+        )
+        outside_manifest.write_text(
+            "goal: SECRET OUTSIDE WORLD\nstatus: leaked\n",
+            encoding="utf-8",
+        )
+        self.addCleanup(lambda: outside_manifest.unlink(missing_ok=True))
+        (bundle_dir / "context.manifest.yaml").symlink_to(outside_manifest)
+
+        env = self._call("04_Ventures/alive")
+        paths = {b["path"] for b in env["structuredContent"]["bundles"]}
+        self.assertNotIn("bait", paths)
+        # Double-check: no bundle entry ever carries the leaked
+        # sentinel from the outside file. Without the gate, this
+        # would appear in the bait bundle's ``goal`` field.
+        for b in env["structuredContent"]["bundles"]:
+            self.assertNotEqual(b.get("goal"), "SECRET OUTSIDE WORLD")
+            self.assertNotEqual(b.get("status"), "leaked")
 
 
 # ---------------------------------------------------------------------------
@@ -572,6 +623,82 @@ class GetBundleTests(unittest.TestCase):
         self.assertEqual(
             env["structuredContent"]["manifest"]["goal"],
             "One-off prototype",
+        )
+
+    def test_symlinked_tasks_json_escaping_world_is_dropped(self) -> None:
+        """A symlinked tasks.json escaping the World must not be parsed.
+
+        Without the containment gate in :func:`_task_counts_for_bundle`,
+        the vendored task-file scanner would hand the symlink target
+        to the JSON parser, which opens the file (even if the parse
+        fails) -- leaking existence + byte-count metadata about the
+        outside target. The fix realpath-checks each candidate
+        ``tasks.json`` before the parser touches it.
+        """
+        # Create a bundle with no in-world tasks but a symlink whose
+        # target is an outside-World file with task-shaped JSON.
+        self.world.write_bundle(
+            "04_Ventures/alive",
+            "symlink-tasks",
+            MANIFEST_MINIMAL,
+        )
+        outside_tasks = pathlib.Path(
+            tempfile.mkstemp(prefix="alive-mcp-escape-tasks-", suffix=".json")[1]
+        )
+        outside_tasks.write_text(
+            json.dumps({"tasks": [
+                {"title": "leaked", "status": "active", "priority": "urgent"},
+                {"title": "leaked2", "status": "todo"},
+            ]}),
+            encoding="utf-8",
+        )
+        self.addCleanup(lambda: outside_tasks.unlink(missing_ok=True))
+        bundle_dir = self.world.walnut_path("04_Ventures/alive/symlink-tasks")
+        (bundle_dir / "tasks.json").symlink_to(outside_tasks)
+
+        env = self._call("04_Ventures/alive", "symlink-tasks")
+        # Bundle still resolves (the dir + manifest are in-world);
+        # counts must be all zeros because the symlinked tasks.json
+        # was dropped at the containment gate.
+        self.assertFalse(env["isError"], msg=env)
+        counts = env["structuredContent"]["derived"]["task_counts"]
+        self.assertEqual(
+            counts,
+            {"urgent": 0, "active": 0, "todo": 0, "blocked": 0, "done": 0},
+            msg="symlinked tasks.json was parsed despite escape",
+        )
+
+    def test_symlinked_raw_dir_escaping_world_counts_zero(self) -> None:
+        """A ``raw/`` dir symlinked outside the World must count zero.
+
+        ``os.walk(followlinks=False)`` DOES walk the contents of a
+        symlinked starting directory -- the flag only blocks
+        *nested* symlink dirs. Without the explicit realpath check,
+        an escaped ``raw/`` symlink would leak the outside file
+        count via ``raw_file_count``. The fix rejects the walk when
+        the realpath of ``raw/`` is not inside the World.
+        """
+        self.world.write_bundle(
+            "04_Ventures/alive",
+            "escape-raw",
+            MANIFEST_MINIMAL,
+        )
+        # Populate an outside dir with real files.
+        outside_raw = tempfile.mkdtemp(prefix="alive-mcp-escape-raw-")
+        self.addCleanup(lambda: shutil.rmtree(outside_raw, ignore_errors=True))
+        for i in range(5):
+            (pathlib.Path(outside_raw) / "leaked-{}.txt".format(i)).write_text("x")
+
+        bundle_dir = self.world.walnut_path("04_Ventures/alive/escape-raw")
+        # Symlink raw/ to the outside directory.
+        (bundle_dir / "raw").symlink_to(outside_raw)
+
+        env = self._call("04_Ventures/alive", "escape-raw")
+        self.assertFalse(env["isError"], msg=env)
+        self.assertEqual(
+            env["structuredContent"]["derived"]["raw_file_count"],
+            0,
+            msg="symlinked raw/ leaked count of outside files",
         )
 
     def test_ambiguous_bare_name_is_not_found(self) -> None:

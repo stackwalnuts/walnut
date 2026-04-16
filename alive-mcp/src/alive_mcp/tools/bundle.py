@@ -68,11 +68,13 @@ Bundle identifier convention
 ----------------------------
 The ``bundle`` param is a POSIX-relative path from the walnut root,
 matching what :func:`list_bundles` returns in each entry's ``path``
-field. The vendored :func:`walnut_paths.scan_bundles` surfaces
-bundles under three layouts -- v3 flat (``<walnut>/foo``), v2 nested
-(``<walnut>/bundles/foo``), and v1 legacy
-(``<walnut>/_core/_capsules/foo``) -- all keyed by their POSIX
-relpath. Callers pass back the ``path`` field verbatim.
+field. The vendored :func:`walnut_paths.find_bundles` surfaces
+bundles under two layouts -- v3 flat (``<walnut>/foo``) and v2
+nested (``<walnut>/bundles/foo``) -- keyed by their POSIX relpath.
+v1 legacy ``_core/_capsules/`` is NOT scanned (``_core`` is in the
+vendored skip set, aligning with the plugin's v3 migration
+posture); callers with legacy capsules migrate them first. Callers
+pass back the ``path`` field verbatim.
 
 Error posture
 -------------
@@ -219,34 +221,85 @@ def _collect_warnings(parsed: Optional[Dict[str, Any]]) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
-def _scan_bundles_safe(walnut_abs: str, world_root: str) -> Dict[str, Dict[str, Any]]:
-    """Wrap :func:`walnut_paths.scan_bundles` with containment checks.
+def _safe_read_manifest(
+    world_root: str,
+    bundle_abs: str,
+) -> Optional[Dict[str, Any]]:
+    """Parse ``<bundle>/context.manifest.yaml`` only if it stays in-world.
 
-    The vendored scanner returns POSIX-relpath keys under the walnut
-    root. Each relpath is re-validated against the World root via
-    :func:`safe_join` so a symlinked bundle directory whose realpath
-    escapes the World is filtered before it reaches the envelope
-    layer. Escaping bundles are dropped silently (indistinguishable
-    from "not a bundle" at the client, matching the security posture
-    of :func:`walnut._kernel_file_in_world`).
+    Does NOT call :func:`walnut_paths.scan_bundles`. That helper
+    READS every manifest before any containment filtering -- a
+    ``context.manifest.yaml`` symlinked to a file outside the World
+    would be parsed and its regex-captured values would flow through
+    to clients, defeating the ``openWorldHint=False`` posture.
+
+    Instead: resolve the manifest path (realpath + commonpath against
+    the World root) and only then pass it to
+    :func:`walnut_paths._parse_manifest_minimal`. Returns ``None`` when:
+
+    * the manifest file is missing,
+    * the manifest's realpath escapes the World (symlink attack), or
+    * the parser itself rejects the file (I/O error, encoding).
+
+    The parser only reads the file once the path is validated, so a
+    symlink escape is caught BEFORE any file open on the parser side.
+    """
+    manifest_path = os.path.join(bundle_abs, "context.manifest.yaml")
+    if not os.path.isfile(manifest_path):
+        return None
+    # Validate containment BEFORE the parser opens the file. A
+    # symlinked manifest whose realpath leaves the World is rejected
+    # here, so the parser never reads outside-World content.
+    if not is_inside(world_root, manifest_path):
+        logger.warning(
+            "manifest at %r escapes World via symlink; dropping",
+            manifest_path,
+        )
+        return None
+    return walnut_paths._parse_manifest_minimal(manifest_path)
+
+
+def _scan_bundles_safe(walnut_abs: str, world_root: str) -> Dict[str, Dict[str, Any]]:
+    """Discover + parse bundles with per-manifest containment checks.
+
+    Unlike :func:`walnut_paths.scan_bundles`, this helper does NOT
+    read manifests before filtering. It uses the discovery-only
+    :func:`walnut_paths.find_bundles` (which checks for manifest
+    presence via a filename match -- no read) and then runs each
+    candidate through :func:`_safe_read_manifest`, which validates
+    the manifest path resolves inside the World before any parse.
+
+    Why not :func:`scan_bundles`: that helper parses every manifest
+    eagerly. A bundle whose ``context.manifest.yaml`` is a symlink to
+    ``/etc/passwd`` would be opened, regex-scanned, and its captured
+    values could be surfaced via ``goal`` / ``status`` fields --
+    bypassing the containment contract. The split used here keeps
+    discovery cheap (directory-walk only) and makes the read-gate
+    explicit and auditable.
+
+    Bundles whose manifest escapes the World are dropped silently
+    (indistinguishable from "not a bundle" at the client, matching
+    the security posture of :func:`walnut._kernel_file_in_world`).
+    The bundle directory itself is ALSO validated in-world, so a
+    symlinked bundle dir that happens to contain a legitimate
+    in-world manifest (via a second symlink) is still rejected.
     """
     try:
-        raw = walnut_paths.scan_bundles(walnut_abs)
+        pairs = walnut_paths.find_bundles(walnut_abs)
     except OSError as exc:
         # Propagate permission/IO errors to the caller so the tool
         # layer can map to ERR_PERMISSION_DENIED.
-        logger.warning("scan_bundles failed for %r: %s", walnut_abs, exc)
+        logger.warning("find_bundles failed for %r: %s", walnut_abs, exc)
         raise
     safe: Dict[str, Dict[str, Any]] = {}
-    for relpath, manifest in raw.items():
-        # Re-validate each bundle path resolves inside the World
-        # after symlink resolution. scan_bundles returns paths
-        # relative to the walnut root; we check containment against
-        # the World root because the walnut itself already resolved
-        # inside the World.
+    for relpath, abs_path in pairs:
+        # First: bundle directory realpath must stay in-world.
+        # Caught by safe_join (which realpaths both sides and uses
+        # commonpath). An escape here means the bundle dir itself
+        # symlinks outside the World.
         segments = [p for p in relpath.split("/") if p]
         try:
-            resolved = safe_join(walnut_abs, *segments)
+            _ = safe_join(walnut_abs, *segments)
         except errors.PathEscapeError:
             logger.warning(
                 "bundle at %r under walnut %r escapes World via "
@@ -255,13 +308,22 @@ def _scan_bundles_safe(walnut_abs: str, world_root: str) -> Dict[str, Dict[str, 
                 walnut_abs,
             )
             continue
-        if not is_inside(world_root, resolved):
+        if not is_inside(world_root, abs_path):
             logger.warning(
                 "bundle realpath at %r escapes World root; dropping",
                 relpath,
             )
             continue
-        safe[relpath] = manifest
+        # Then: parse the manifest ONLY after its path is validated.
+        # A symlinked manifest-inside-an-OK-bundle-dir is still
+        # rejected here.
+        parsed = _safe_read_manifest(world_root, abs_path)
+        if parsed is None:
+            # Missing, escape, or parse failure -- drop the bundle
+            # entirely rather than surfacing a half-populated record.
+            # Matches scan_bundles' posture ("absence != no bundle").
+            continue
+        safe[relpath] = parsed
     return safe
 
 
@@ -430,13 +492,21 @@ def _bundle_not_found_envelope(
 # ---------------------------------------------------------------------------
 
 
-def _task_counts_for_bundle(bundle_abs: str) -> Dict[str, int]:
+def _task_counts_for_bundle(world_root: str, bundle_abs: str) -> Dict[str, int]:
     """Aggregate task counts from tasks.json files under a bundle.
 
     Mirrors the counting logic in
     ``tasks_pure.summary_from_walnut`` without the bundle-level
     branching (scan every ``tasks.json`` under the bundle, recursive).
     Returns zeros when no task file exists.
+
+    Every task-file path is validated against the World root before
+    the parser opens it. A ``tasks.json`` that is a symlink whose
+    realpath escapes the World is skipped silently -- same posture
+    as :func:`_safe_read_manifest`. Without this gate, a symlinked
+    task file could cause the parser to read outside-World content
+    (a JSON-decode failure would still open the file and could
+    leak byte counts via error timing).
     """
     counts = {"urgent": 0, "active": 0, "todo": 0, "blocked": 0, "done": 0}
     try:
@@ -444,6 +514,17 @@ def _task_counts_for_bundle(bundle_abs: str) -> Dict[str, int]:
     except OSError:
         return counts
     for tf in task_files:
+        # Containment gate: drop task files whose realpath leaves
+        # the World. A symlinked tasks.json pointing at an outside
+        # file is indistinguishable from "no task file" at this
+        # layer by design.
+        if not is_inside(world_root, tf):
+            logger.warning(
+                "tasks.json at %r escapes World via symlink; "
+                "dropping",
+                tf,
+            )
+            continue
         data = tasks_pure._read_tasks_json(tf)
         if data is None:
             continue
@@ -465,19 +546,37 @@ def _task_counts_for_bundle(bundle_abs: str) -> Dict[str, int]:
     return counts
 
 
-def _raw_file_count(bundle_abs: str) -> int:
+def _raw_file_count(world_root: str, bundle_abs: str) -> int:
     """Count regular files under ``<bundle>/raw/``. Zero when absent.
 
-    Descends recursively; counts symlinks that point to regular
-    files (the alternative -- strict realpath containment -- would
-    require per-entry checks and the benefit is marginal for a
-    count). Broken symlinks and directory symlinks to outside the
-    World are skipped implicitly because ``os.walk`` defaults to
-    ``followlinks=False``, which prevents traversal into foreign
-    trees.
+    The ``raw/`` directory itself is containment-checked: if
+    ``raw/`` is a symlink whose realpath points outside the World
+    (or outside the bundle directory), the walk is skipped and the
+    count returns zero. Without this gate, ``os.walk(raw_dir,
+    followlinks=False)`` would still walk the contents of a
+    symlinked ``raw/`` (the ``followlinks=False`` flag only affects
+    *nested* symlink directories, not the starting directory
+    itself), leaking metadata (file counts) from outside the World
+    and giving a DoS vector for pointing ``raw/`` at a huge
+    filesystem tree.
+
+    Symlinks to files INSIDE ``raw/`` are counted if they happen to
+    be regular files -- the cost of per-entry realpath is not
+    justified for an aggregate count, and in-World symlinked raw
+    files are a benign shared-source pattern. Directory symlinks
+    nested inside ``raw/`` are not followed (os.walk default).
     """
     raw_dir = os.path.join(bundle_abs, "raw")
     if not os.path.isdir(raw_dir):
+        return 0
+    # raw/ dir itself must stay in-world. Catches the
+    # "symlinked-raw-to-outside" escape that os.walk would
+    # otherwise follow on the first iteration.
+    if not is_inside(world_root, raw_dir):
+        logger.warning(
+            "raw/ at %r escapes World via symlink; counting zero",
+            raw_dir,
+        )
         return 0
     count = 0
     try:
@@ -671,8 +770,8 @@ async def get_bundle(
 
     manifest_nine = _normalize_manifest(parsed)
 
-    task_counts = _task_counts_for_bundle(bundle_abs)
-    raw_count = _raw_file_count(bundle_abs)
+    task_counts = _task_counts_for_bundle(world_root, bundle_abs)
+    raw_count = _raw_file_count(world_root, bundle_abs)
     last_updated = _bundle_last_updated(bundle_abs, manifest_nine.get("updated"))
 
     return envelope.ok(
