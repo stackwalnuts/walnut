@@ -2,6 +2,7 @@
   <a href="https://github.com/alivecontext/alive/stargazers"><img src="https://img.shields.io/github/stars/alivecontext/alive?style=flat&color=F97316&label=Stars" alt="GitHub Stars"></a>
   <a href="https://github.com/alivecontext/alive/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://x.com/ALIVE_context"><img src="https://img.shields.io/badge/𝕏-@ALIVE_context-000000?logo=x&logoColor=white" alt="@ALIVE_context"></a>
+  <a href="https://discord.gg/mJvDsU9ApN"><img src="https://img.shields.io/discord/1485396210486612100?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
 </p>
 
 ```
