@@ -28,7 +28,8 @@ def main():
         data = json.load(f)
 
     stats = data['stats']
-    walnuts = data['walnuts']
+    # Exclude archived walnuts from the graph — they shouldn't render as active nodes
+    walnuts = [w for w in data['walnuts'] if not w.get('archived')]
     people = data.get('people', [])
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
