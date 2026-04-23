@@ -23,17 +23,16 @@ jobs:
     # Gate the auto-review:
     #   - skip draft PRs (author still iterating)
     #   - skip if the PR carries `no-claude-review` label (explicit opt-out)
-    #   - skip if author is on the internal team (Patrick/Ben/Will do
-    #     manual reviews; auto-review would be noise). External
-    #     contributors still get auto-reviewed by default.
+    # Runs on every non-draft PR regardless of author. Internal PRs land
+    # without manual review often enough that the old "internal = hand-reviewed"
+    # carve-out was costing more signal than it saved.
     # `workflow_dispatch` runs bypass the gate -- if you're firing it
     # manually you want it to run.
     if: |
       github.event_name == 'workflow_dispatch' ||
       (
         github.event.pull_request.draft == false &&
-        !contains(github.event.pull_request.labels.*.name, 'no-claude-review') &&
-        !contains(fromJson('["benslockedin","patrickSupernormal","willsupernormal"]'), github.event.pull_request.user.login)
+        !contains(github.event.pull_request.labels.*.name, 'no-claude-review')
       )
 
     runs-on: ubuntu-latest
